@@ -54,7 +54,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
 
   if (!exercises.length) {
     container.replaceChildren(el('div', { class: 'state-box' }, [
-      el('div', { class: 'big', text: '📭' }),
+      el('div', { class: 'big' }, [icon('mail')]),
       el('h3', { text: reviewMode ? t(L, 'reviewEmpty') : t(L, 'lessonError') }),
     ]));
     return;
@@ -194,13 +194,13 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     });
     const skipBtn = el('button', { class: 'btn btn-ghost btn-sm', text: t(L, 'skip'), onclick: onSkip });
     state.checkBtn = checkBtn;
-    const hintBtn = el('button', { class: 'btn btn-ghost btn-sm', text: `💡 ${t(L, 'hint')}`, onclick: () => showHint(ex) });
+    const hintBtn = el('button', { class: 'btn btn-ghost btn-sm', onclick: () => showHint(ex) }, [iconLabel('bulb', t(L, 'hint'))]);
 
     if (ex.type === 'listen-and-type') {
       card.append(el('div', { class: 'prompt-label', text: t(L, 'typeWhatYouHear') }));
       const audioRow = el('div', { class: 'audio-row' });
-      const listenBtn = el('button', { class: 'btn', text: `🔊 ${t(L, 'play')}`, onclick: () => playAudio(ex.en) });
-      const slowBtn = el('button', { class: 'btn btn-ghost', text: `🐢 ${t(L, 'playSlow')}`, onclick: () => playAudio(ex.en, 0.65) });
+      const listenBtn = el('button', { class: 'btn', onclick: () => playAudio(ex.en) }, [iconLabel('audio', t(L, 'play'))]);
+      const slowBtn = el('button', { class: 'btn btn-ghost', onclick: () => playAudio(ex.en, 0.65) }, [iconLabel('turtle', t(L, 'playSlow'))]);
       audioRow.append(listenBtn, slowBtn);
       if (!speechSupported()) {
         audioRow.append(el('p', { class: 'muted small', text: t(L, 'speechUnavailable') }));
@@ -325,7 +325,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     else if (ex.type === 'word-order') text = `${ex.words.length} ${t(L, 'words') || 'words'} — ${t(L, 'meaning')}: ${ex.ar}`;
     else if (ex.type === 'multiple-choice') text = ex.hint || `${t(L, 'meaning')}: ${ex.ar}`;
     if (ex.hint) text = `${ex.hint} — ${text}`;
-    body.append(el('div', { class: 'hint-box', dir: 'auto', text: `💡 ${text}` }));
+    body.append(el('div', { class: 'hint-box', dir: 'auto' }, [iconLabel('bulb', text)]));
   }
 
   // ---------- checking ----------
@@ -375,7 +375,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       incorrect: t(L, 'incorrect'),
       skipped: t(L, 'incorrect'),
     };
-    fb.append(el('div', { class: 'fb-title', text: `${result.status === 'correct' ? '🎉' : result.status === 'minor' ? '🟡' : '❌'} ${titles[result.status]}` }));
+    fb.append(el('div', { class: 'fb-title' }, [iconLabel(result.status === 'correct' ? 'check' : result.status === 'minor' ? 'alert' : 'close', titles[result.status])]));
 
     if (result.status !== 'correct') {
       const expected = ex.type === 'fill-blank' && result.expectedDisplay ? ex.display.replace('___', ex.blankWord) : ex.en;
@@ -398,7 +398,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     persistAnswer(ex, result.status);
 
     // flip buttons
-    const nextBtn = el('button', { class: 'btn btn-primary', text: `${idx === exercises.length - 1 ? '🏁' : '→'} ${idx === exercises.length - 1 ? t(L, 'finishLesson') : t(L, 'nextExercise')}`, onclick: onNext });
+    const nextBtn = el('button', { class: 'btn btn-primary', onclick: onNext }, [iconLabel(idx === exercises.length - 1 ? 'trophy' : 'arrowRight', idx === exercises.length - 1 ? t(L, 'finishLesson') : t(L, 'nextExercise'))]);
     state.checkBtn.replaceWith(nextBtn);
     nextBtn.focus();
   }
@@ -438,7 +438,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     checked = true;
     results[idx] = { status: 'skipped', ex };
     const fb = el('div', { class: 'feedback bad' }, [
-      el('div', { class: 'fb-title', text: `⏭ ${t(L, 'skip')}` }),
+      el('div', { class: 'fb-title' }, [iconLabel('arrowRight', t(L, 'skip'))]),
       el('div', {}, [`${t(L, 'expectedAnswer')}: `, el('span', { class: 'expected', text: ex.en })]),
       ex.ar ? el('div', { class: 'ar-meaning', dir: 'rtl', text: ex.ar }) : null,
     ]);
@@ -474,7 +474,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
 
     body.append(el('div', { class: 'card center' }, [
       el('div', { class: 'state-box', style: { padding: '1rem 0' } }, [
-        el('div', { class: 'big', text: acc >= 80 ? '🎉' : '💪' }),
+        el('div', { class: 'big' }, [icon(acc >= 80 ? 'trophy' : 'flame')]),
         el('h3', { text: reviewMode ? t(L, 'reviewSessionDone') : t(L, 'lessonComplete') }),
       ]),
       el('div', { class: 'summary-score', text: `${acc}%` }),
@@ -516,7 +516,7 @@ export function renderErrorState(container, lang, err) {
   const L = lang || 'en';
   console.error('lesson error:', err);
   container.replaceChildren(el('div', { class: 'state-box' }, [
-    el('div', { class: 'big', text: '⚠️' }),
+    el('div', { class: 'big' }, [icon('alert')]),
     el('h3', { text: t(L, 'errorTitle') }),
     el('p', { text: err && err.message ? err.message : t(L, 'lessonError') }),
     el('a', { class: 'btn btn-primary mt', href: '#/', text: t(L, 'errorBack') }),
