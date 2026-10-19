@@ -1,0 +1,284 @@
+{
+  "generatedAt": "2026-10-19T09:17:12.126Z",
+  "exactDuplicates": [],
+  "similarForReview": [
+    {
+      "a": {
+        "lessonId": "lesson-012",
+        "exId": "lesson-012-ex-015",
+        "en": "You play video games every evening."
+      },
+      "b": {
+        "lessonId": "lesson-014",
+        "exId": "lesson-014-ex-031",
+        "en": "You don't play video games every evening."
+      },
+      "sim": 0.86
+    },
+    {
+      "a": {
+        "lessonId": "lesson-024",
+        "exId": "lesson-024-ex-037",
+        "en": "He had eaten lunch before the meeting."
+      },
+      "b": {
+        "lessonId": "lesson-034",
+        "exId": "lesson-034-ex-042",
+        "en": "Before the meeting, he had eaten lunch."
+      },
+      "sim": 1
+    },
+    {
+      "a": {
+        "lessonId": "lesson-029",
+        "exId": "lesson-029-ex-038",
+        "en": "He is going to buy a new car next month."
+      },
+      "b": {
+        "lessonId": "lesson-035",
+        "exId": "lesson-035-ex-046",
+        "en": "He is going to buy a car next month."
+      },
+      "sim": 0.9
+    },
+    {
+      "a": {
+        "lessonId": "lesson-037",
+        "exId": "lesson-037-ex-015",
+        "en": "Is it cold outside?"
+      },
+      "b": {
+        "lessonId": "lesson-071",
+        "exId": "lesson-071-ex-004",
+        "en": "It is cold outside."
+      },
+      "sim": 1
+    },
+    {
+      "a": {
+        "lessonId": "lesson-038",
+        "exId": "lesson-038-ex-030",
+        "en": "What do you usually have for breakfast?"
+      },
+      "b": {
+        "lessonId": "lesson-062",
+        "exId": "lesson-062-ex-006",
+        "en": "What do you have for breakfast?"
+      },
+      "sim": 0.86
+    },
+    {
+      "a": {
+        "lessonId": "lesson-038",
+        "exId": "lesson-038-ex-036",
+        "en": "What time do you wake up?"
+      },
+      "b": {
+        "lessonId": "lesson-062",
+        "exId": "lesson-062-ex-001",
+        "en": "What time do you usually wake up?"
+      },
+      "sim": 0.86
+    },
+    {
+      "a": {
+        "lessonId": "lesson-039",
+        "exId": "lesson-039-ex-052",
+        "en": "How much time do we have?"
+      },
+      "b": {
+        "lessonId": "lesson-114",
+        "exId": "lesson-114-ex-004",
+        "en": "How much time do we have left?"
+      },
+      "sim": 0.86
+    },
+    {
+      "a": {
+        "lessonId": "lesson-052",
+        "exId": "lesson-052-ex-038",
+        "en": "I look forward to your reply."
+      },
+      "b": {
+        "lessonId": "lesson-120",
+        "exId": "lesson-120-ex-012",
+        "en": "I look forward to your quick reply."
+      },
+      "sim": 0.86
+    },
+    {
+      "a": {
+        "lessonId": "lesson-053",
+        "exId": "lesson-053-ex-038",
+        "en": "They are all well, thank you."
+      },
+      "b": {
+        "lessonId": "lesson-072",
+        "exId": "lesson-072-ex-016",
+        "en": "They are all doing well, thank you."
+      },
+      "sim": 0.86
+    },
+    {
+      "a": {
+        "lessonId": "lesson-054",
+        "exId": "lesson-054-ex-033",
+        "en": "Sounds like a plan!"
+      },
+      "b": {
+        "lessonId": "lesson-104",
+        "exId": "lesson-104-ex-034",
+        "en": "Sounds like a plan."
+      },
+      "sim": 1
+    },
+    {
+      "a": {
+        "lessonId": "lesson-055",
+        "exId": "lesson-055-ex-002",
+        "en": "Yes, I have two brothers and one sister."
+      },
+      "b": {
+        "lessonId": "lesson-106",
+        "exId": "lesson-106-ex-001",
+        "en": "I have two brothers and one sister."
+      },
+      "sim": 0.88
+    },
+    {
+      "a": {
+        "lessonId": "lesson-066",
+        "exId": "lesson-066-ex-017",
+        "en": "Is there anything I can do?"
+      },
+      "b": {
+        "lessonId": "lesson-078",
+        "exId": "lesson-078-ex-055",
+        "en": "Is there anything else I can do?"
+      },
+      "sim": 0.86
+    },
+    {
+      "a": {
+        "lessonId": "lesson-066",
+        "exId": "lesson-066-ex-037",
+        "en": "Please, have a seat."
+      },
+      "b": {
+        "lessonId": "lesson-083",
+        "exId": "lesson-083-ex-002",
+        "en": "Please have a seat."
+      },
+      "sim": 1
+    },
+    {
+      "a": {
+        "lessonId": "lesson-068",
+        "exId": "lesson-068-ex-053",
+        "en": "Let me know if anything changes."
+      },
+      "b": {
+        "lessonId": "lesson-119",
+        "exId": "lesson-119-ex-019",
+        "en": "Please let me know if anything changes."
+      },
+      "sim": 0.86
+    },
+    {
+      "a": {
+        "lessonId": "lesson-069",
+        "exId": "lesson-069-ex-011",
+        "en": "I would rather stay home tonight."
+      },
+      "b": {
+        "lessonId": "lesson-114",
+        "exId": "lesson-114-ex-017",
+        "en": "I would rather stay at home tonight."
+      },
+      "sim": 0.86
+    },
+    {
+      "a": {
+        "lessonId": "lesson-069",
+        "exId": "lesson-069-ex-030",
+        "en": "My favorite season is autumn."
+      },
+      "b": {
+        "lessonId": "lesson-071",
+        "exId": "lesson-071-ex-031",
+        "en": "Autumn is my favorite season."
+      },
+      "sim": 1
+    },
+    {
+      "a": {
+        "lessonId": "lesson-075",
+        "exId": "lesson-075-ex-016",
+        "en": "Could I have an extra pillow, please?"
+      },
+      "b": {
+        "lessonId": "lesson-084",
+        "exId": "lesson-084-ex-054",
+        "en": "Could I have an extra pillow?"
+      },
+      "sim": 0.86
+    },
+    {
+      "a": {
+        "lessonId": "lesson-089",
+        "exId": "lesson-089-ex-037",
+        "en": "Can you do me a favor?"
+      },
+      "b": {
+        "lessonId": "lesson-094",
+        "exId": "lesson-094-ex-004",
+        "en": "Can you do me a small favor?"
+      },
+      "sim": 0.86
+    },
+    {
+      "a": {
+        "lessonId": "lesson-105",
+        "exId": "lesson-105-ex-042",
+        "en": "We watch TV after dinner."
+      },
+      "b": {
+        "lessonId": "lesson-110",
+        "exId": "lesson-110-ex-019",
+        "en": "After dinner, we watch TV."
+      },
+      "sim": 1
+    },
+    {
+      "a": {
+        "lessonId": "lesson-107",
+        "exId": "lesson-107-ex-017",
+        "en": "Please write your name in capital letters."
+      },
+      "b": {
+        "lessonId": "lesson-120",
+        "exId": "lesson-120-ex-002",
+        "en": "Please write your full name in capital letters."
+      },
+      "sim": 0.88
+    },
+    {
+      "a": {
+        "lessonId": "lesson-114",
+        "exId": "lesson-114-ex-043",
+        "en": "We agreed on the final date."
+      },
+      "b": {
+        "lessonId": "lesson-120",
+        "exId": "lesson-120-ex-038",
+        "en": "We agreed on the final delivery date."
+      },
+      "sim": 0.86
+    }
+  ],
+  "summary": {
+    "exactCount": 0,
+    "similarCount": 21,
+    "dictationSentences": 5226
+  }
+}
