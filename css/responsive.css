@@ -34,6 +34,8 @@
 
 /* header nav collapses on small screens */
 @media (max-width: 639px) {
+  /* The floating bottom bar is the only mobile navigation. */
+  .app-header .main-nav { display: none !important; }
   .main-nav .nav-link { padding: .45rem .55rem; font-size: .85rem; }
   .header-inner { padding: .5rem .7rem; }
   .brand span.brand-name { display: none; }
