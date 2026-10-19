@@ -1,0 +1,108 @@
+/* ============================================================
+   LingoStep — sw.js (service worker)
+   Strategy:
+   - App shell (HTML/CSS/JS core, icons, manifest): precached,
+     refreshed with stale-while-revalidate.
+   - Lesson modules (lessons/**) + data manifest: cached on
+     first fetch (stale-while-revalidate) so opened lessons work
+     offline. "Download all lessons" in Settings fetches every
+     lesson once to prime the cache.
+   - Never caches cross-origin requests or POST responses.
+   Version bump replaces old caches on activate.
+   ============================================================ */
+
+const VERSION = 'v1.0.0';
+const SHELL_CACHE = `lingostep-shell-${VERSION}`;
+const LESSON_CACHE = `lingostep-lessons-${VERSION}`;
+const KNOWN_CACHES = [SHELL_CACHE, LESSON_CACHE];
+
+const SHELL_ASSETS = [
+  './',
+  './index.html',
+  './manifest.json',
+  './css/style.css',
+  './css/themes.css',
+  './css/responsive.css',
+  './js/app.js',
+  './js/router.js',
+  './js/utils.js',
+  './js/i18n.js',
+  './js/settings.js',
+  './js/storage.js',
+  './js/progress.js',
+  './js/review.js',
+  './js/speech.js',
+  './js/grading.js',
+  './js/lesson-schema.js',
+  './js/lesson-loader.js',
+  './js/lesson-engine.js',
+  './data/lesson-manifest.js',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/icon-192-maskable.png',
+  './icons/icon-512-maskable.png',
+  './icons/favicon-64.png',
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(SHELL_CACHE)
+      .then((cache) => cache.addAll(SHELL_ASSETS))
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => !KNOWN_CACHES.includes(k)).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data === 'SKIP_WAITING') self.skipWaiting();
+});
+
+function isLessonAsset(url) {
+  return url.pathname.includes('/lessons/') || url.pathname.includes('/data/');
+}
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return; // never touch cross-origin
+
+  // navigations: network first, fall back to cached shell (offline)
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(SHELL_CACHE).then((c) => c.put('./index.html', copy)).catch(() => {});
+          return response;
+        })
+        .catch(() => caches.match('./index.html').then((r) => r || caches.match('./')))
+    );
+    return;
+  }
+
+  // everything else same-origin: stale-while-revalidate
+  event.respondWith(
+    caches.open(isLessonAsset(url) ? LESSON_CACHE : SHELL_CACHE).then(async (cache) => {
+      const cached = await cache.match(request);
+      const network = fetch(request)
+        .then((response) => {
+          if (response && response.ok) {
+            const copy = response.clone();
+            cache.put(request, copy).catch(() => {});
+          }
+          return response;
+        })
+        .catch(() => undefined);
+      return cached || network.then((r) => r || new Response('Offline', { status: 503, statusText: 'Offline' }));
+    })
+  );
+});
