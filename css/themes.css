@@ -6,20 +6,20 @@
   --radius: 14px;
 
   /* light theme (default) */
-  --bg: #f4f6f5;
+  --bg: #f6f8f1;
   --surface: #ffffff;
-  --surface-2: #edf1ef;
-  --surface-blur: rgba(255, 255, 255, .86);
-  --border: #dce3e0;
-  --text: #1c2422;
-  --muted: #5f6b67;
+  --surface-2: #eff4e9;
+  --surface-blur: rgba(250, 253, 245, .9);
+  --border: #e1e9da;
+  --text: #263328;
+  --muted: #657363;
 
-  --primary: #0e7a5f;
-  --primary-strong: #0b624c;
-  --primary-deep: #093f31;
-  --primary-soft: #27b183;
-  --primary-tint: #e2f3ec;
-  --focus-ring: #38c79b;
+  --primary: #8bc66b;
+  --primary-strong: #578c45;
+  --primary-deep: #3f6f35;
+  --primary-soft: #b8df91;
+  --primary-tint: #eaf6dc;
+  --focus-ring: #9bce76;
 
   --success: #1c8a4e;
   --success-strong: #146c3c;
