@@ -1,0 +1,60 @@
+/* ============================================================
+   LingoStep — responsive rules (mobile-first enhancements)
+   ============================================================ */
+
+/* small phones: tighten paddings */
+@media (max-width: 420px) {
+  .app-main { padding: 1rem .8rem 2.5rem; }
+  .hero { padding: 1.2rem 1.05rem; }
+  .hero h1 { font-size: 1.28rem; }
+  .sentence-text { font-size: 1.12rem; }
+  .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .stat-value { font-size: 1.25rem; }
+}
+
+/* tablets and up */
+@media (min-width: 640px) {
+  .app-main { padding: 1.6rem 1.25rem 3rem; }
+  .hero { padding: 1.8rem 1.7rem; }
+  .hero h1 { font-size: 1.72rem; }
+  .card { padding: 1.3rem; }
+  .sentence-text { font-size: 1.4rem; }
+}
+
+/* desktop */
+@media (min-width: 900px) {
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    align-items: start;
+  }
+  .two-col > .card + .card { margin-top: 0; }
+}
+
+/* header nav collapses on small screens */
+@media (max-width: 639px) {
+  .main-nav .nav-link { padding: .45rem .55rem; font-size: .85rem; }
+  .header-inner { padding: .5rem .7rem; }
+  .brand span.brand-name { display: none; }
+}
+
+/* Arabic RTL fine-tuning */
+[dir="rtl"] body { letter-spacing: 0; }
+[dir="rtl"] .hero h1,
+[dir="rtl"] .sentence-text { letter-spacing: 0; }
+
+/* reduce motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* print: only lesson content is useful */
+@media print {
+  .app-header, .app-footer, .audio-row, .answer-row, .btn { display: none !important; }
+  body { background: #fff; color: #000; }
+}
