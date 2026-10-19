@@ -743,3 +743,23 @@ body {
 }
 [data-theme="dark"] .stat-card .stat-value { color: var(--primary-strong); }
 [data-theme="dark"] .stat-card .stat-label { color: var(--muted); }
+
+
+/* Central SVG icon system: icon artwork is editable in js/icon-config.js */
+.ui-icon {
+  display: inline-flex;
+  width: 1.2em;
+  height: 1.2em;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+}
+.ui-icon svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.icon-label { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; }
+.icon-label .ui-icon { width: 1.12em; height: 1.12em; }
+.section-icon .ui-icon { width: 1.45em; height: 1.45em; }
+.mobile-nav-icon.ui-icon { width: 42px; height: 42px; }
+.mobile-nav-link.is-active .mobile-nav-icon.ui-icon { width: 58px; height: 58px; }
+.big .ui-icon { width: 1.8em; height: 1.8em; }
+.card-title .icon-label, h2 .icon-label, h3 .icon-label { justify-content: flex-start; }
