@@ -40,4 +40,13 @@ export const ICONS = {
   moon: { type: 'svg', src: './assets/icons/icons.svg#moon' },
   monitor: { type: 'svg', src: './assets/icons/icons.svg#monitor' },
   circle: { type: 'svg', src: './assets/icons/icons.svg#circle' },
+  target: { type: 'svg', src: './assets/icons/icons.svg#target' },
+  pen: { type: 'svg', src: './assets/icons/icons.svg#pen' },
+  books: { type: 'svg', src: './assets/icons/icons.svg#books' },
+  user: { type: 'svg', src: './assets/icons/icons.svg#user' },
+  checkCircle: { type: 'svg', src: './assets/icons/icons.svg#checkCircle' },
+  xCircle: { type: 'svg', src: './assets/icons/icons.svg#xCircle' },
+  calendar: { type: 'svg', src: './assets/icons/icons.svg#calendar' },
+  sparkle: { type: 'svg', src: './assets/icons/icons.svg#sparkle' },
+  grid: { type: 'svg', src: './assets/icons/icons.svg#grid' },
 };

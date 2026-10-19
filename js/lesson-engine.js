@@ -7,6 +7,7 @@
    ============================================================ */
 
 import { el, toast } from './utils.js';
+import { icon, iconLabel } from './icons.js';
 import { t } from './i18n.js';
 import { getSettings } from './settings.js';
 import { checkAnswer } from './grading.js';
@@ -91,37 +92,25 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
 
   function renderHead() {
     head.replaceChildren();
-    const crumb = reviewMode
-      ? el('div', { class: 'breadcrumb' }, [
-          el('a', { href: '#/review', text: t(L, 'navReview') }),
-          ' › ',
-          el('span', { text: t(L, 'reviewMode') }),
-        ])
-      : el('div', { class: 'breadcrumb' }, [
-          el('a', { href: '#/', text: t(L, 'navHome') }),
-          ' › ',
-          el('a', { href: `#/section/${lesson.section}`, text: sectionLabel(lesson.section, L) }),
-        ]);
-
-    const title = reviewMode
-      ? t(L, 'reviewTitle')
-      : `${lesson.title} — ${lesson.titleAr}`;
-    const sub = reviewMode
-      ? `${exercises.length - idx} ${t(L, 'remaining')}`
-      : `${t(L, 'level')}: ${lesson.level} · ~${lesson.estimatedMinutes} ${t(L, 'minutes')} · ${lesson.objectives[0] || ''}`;
+    const backTarget = reviewMode ? '#/review' : `#/section/${lesson.section}`;
+    const kicker = reviewMode ? t(L, 'reviewMode') : sectionLabel(lesson.section, L);
+    const title = reviewMode ? t(L, 'reviewTitle') : lesson.title;
+    const doneSoFar = results.filter((r) => r && rank[r.status] >= rank.minor).length;
+    const ringPct = Math.round((doneSoFar / exercises.length) * 100);
 
     head.append(
-      crumb,
-      el('div', { class: 'row-between' }, [
-        el('div', { class: 'grow' }, [
+      el('div', { class: 'lesson-top' }, [
+        el('a', {
+          class: 'lesson-back',
+          href: backTarget,
+          'aria-label': t(L, reviewMode ? 'exitReview' : 'exitLesson'),
+          onclick: (e) => { e.preventDefault(); confirmExit(); },
+        }, [icon(reviewMode ? 'close' : 'arrowLeft')]),
+        el('div', { class: 'lesson-top-titles' }, [
+          el('div', { class: 'lesson-top-kicker', text: `${t(L, 'sectionLabel')} · ${kicker}` }),
           el('h2', { text: title }),
-          el('div', { class: 'sub', text: sub }),
         ]),
-        el('button', {
-          class: 'btn btn-ghost btn-sm',
-          text: `✕ ${t(L, reviewMode ? 'exitReview' : 'exitLesson')}`,
-          onclick: confirmExit,
-        }),
+        el('div', { class: 'ring-sm', style: { '--pct': String(ringPct) }, role: 'img', 'aria-label': `${ringPct}%`, text: `${ringPct}%` }),
       ]),
     );
   }
@@ -162,71 +151,79 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     const ex = exercises[idx];
     const doneCount = results.filter((r) => r && rank[r.status] >= rank.minor).length;
 
-    // progress row
+    // progress strip: counter + linear bar (position-based)
     const progressPct = Math.round(((idx) / exercises.length) * 100);
     body.append(
       el('div', { class: 'ex-progress' }, [
-        el('span', { class: 'ex-counter', text: `${idx + 1} ${t(L, 'ofExercises')} ${exercises.length}` }),
+        el('span', { class: 'ex-counter', text: reviewMode ? t(L, 'exerciseCounter', { i: idx + 1, n: exercises.length }) : t(L, 'sentenceCounter', { i: idx + 1, n: exercises.length }) }),
         el('div', { class: 'progress', role: 'progressbar', 'aria-valuenow': progressPct, 'aria-valuemin': 0, 'aria-valuemax': 100 }, [
           el('span', { style: { width: `${progressPct}%` } }),
         ]),
       ]),
-      el('div', { class: 'row', style: { marginBottom: '.7rem' } }, [
-        el('span', { class: 'chip chip-level', text: `${t(L, 'exercise')} ${idx + 1}` }),
-        el('span', { class: 'chip', text: typeLabel(ex.type, L) }),
-        ...(doneCount ? [el('span', { class: 'chip chip-done', text: `${doneCount} ✓` })] : []),
-      ]),
     );
 
+    // every sentence lives in its own self-contained card:
+    // number chip, media/prompt, input, check action, hint and feedback
     const card = el('div', { class: 'sentence-card' });
-    body.append(card);
+    const cardHead = el('div', { class: 'sentence-head' }, [
+      el('span', { class: 'sc-num', text: reviewMode ? t(L, 'exerciseCounter', { i: idx + 1, n: exercises.length }) : t(L, 'sentenceCounter', { i: idx + 1, n: exercises.length }) }),
+      el('span', { class: 'chip sc-type', text: typeLabel(ex.type, L) }),
+      ...(doneCount ? [el('span', { class: 'chip chip-done' }, [iconLabel('check', String(doneCount))])] : []),
+    ]);
+    card.append(cardHead);
 
     const inputRow = el('div', { class: 'answer-row' });
     const feedbackBox = el('div');
-    const controls = el('div', { class: 'row', style: { marginTop: '.9rem', justifyContent: 'center' } });
+    const actions = el('div', { class: 'card-actions' });
     state.feedbackBox = feedbackBox;
-    body.append(inputRow, feedbackBox, controls);
+    state.card = card;
 
     const checkBtn = el('button', {
       class: 'btn btn-primary',
-      text: `✓ ${t(L, 'checkAnswer')}`,
       onclick: () => onCheck(),
-    });
+    }, [iconLabel('check', t(L, 'checkAnswer'))]);
     const skipBtn = el('button', { class: 'btn btn-ghost btn-sm', text: t(L, 'skip'), onclick: onSkip });
     state.checkBtn = checkBtn;
-    const hintBtn = el('button', { class: 'btn btn-ghost btn-sm', onclick: () => showHint(ex) }, [iconLabel('bulb', t(L, 'hint'))]);
+    const hintBtn = el('button', { class: 'btn btn-round', 'aria-label': t(L, 'hint'), title: t(L, 'hint'), onclick: () => showHint(ex) }, [icon('bulb')]);
 
     if (ex.type === 'listen-and-type') {
       card.append(el('div', { class: 'prompt-label', text: t(L, 'typeWhatYouHear') }));
       const audioRow = el('div', { class: 'audio-row' });
-      const listenBtn = el('button', { class: 'btn', onclick: () => playAudio(ex.en) }, [iconLabel('audio', t(L, 'play'))]);
-      const slowBtn = el('button', { class: 'btn btn-ghost', onclick: () => playAudio(ex.en, 0.65) }, [iconLabel('turtle', t(L, 'playSlow'))]);
+      const listenBtn = el('button', { class: 'audio-main', 'aria-label': t(L, 'play'), title: t(L, 'play'), onclick: () => playAudio(ex.en) }, [icon('audio')]);
+      const slowBtn = el('button', { class: 'audio-slow', 'aria-label': t(L, 'playSlow'), title: t(L, 'playSlow'), onclick: () => playAudio(ex.en, 0.65) }, [icon('turtle')]);
       audioRow.append(listenBtn, slowBtn);
       if (!speechSupported()) {
         audioRow.append(el('p', { class: 'muted small', text: t(L, 'speechUnavailable') }));
         // If speech is unavailable, show the sentence so the exercise stays usable.
-        card.append(el('div', { class: 'sentence-text', text: ex.en }));
+        card.append(el('div', { class: 'sentence-text', dir: 'ltr', text: ex.en }));
       } else {
+        audioRow.append(el('span', { class: 'audio-caption', text: `${t(L, 'play')} · ${t(L, 'playSlow')}` }));
         card.append(audioRow);
         setTimeout(() => playAudio(ex.en), 250); // auto-play once per exercise
       }
       if (settings.showArabic && ex.ar) {
         card.append(el('div', { class: 'sentence-ar', dir: 'rtl', text: ex.ar }));
       }
-      const input = el('input', { type: 'text', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'aria-label': t(L, 'typeWhatYouHear'), placeholder: '…' });
+      const input = el('input', { type: 'text', dir: 'ltr', 'data-latin': 'true', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'aria-label': t(L, 'typeWhatYouHear'), placeholder: '…' });
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); checked ? onNext() : onCheck(); } });
-      inputRow.append(input, checkBtn, hintBtn, skipBtn);
+      inputRow.append(input);
+      card.append(inputRow);
+      actions.append(checkBtn, hintBtn, skipBtn);
+      card.append(actions);
       setTimeout(() => input.focus(), 120);
       state.input = input;
     }
 
     if (ex.type === 'fill-blank') {
       card.append(el('div', { class: 'prompt-label', text: t(L, 'fillPrompt') }));
-      card.append(el('div', { class: 'blank-display', html: trustedBlankHtml(ex.display) }));
+      card.append(el('div', { class: 'blank-display', dir: 'ltr', html: trustedBlankHtml(ex.display) }));
       if (settings.showArabic && ex.ar) card.append(el('div', { class: 'sentence-ar', dir: 'rtl', text: ex.ar }));
-      const input = el('input', { type: 'text', autocomplete: 'off', spellcheck: 'false', 'aria-label': t(L, 'fillPrompt'), placeholder: '…' });
+      const input = el('input', { type: 'text', dir: 'ltr', 'data-latin': 'true', autocomplete: 'off', spellcheck: 'false', 'aria-label': t(L, 'fillPrompt'), placeholder: '…' });
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); checked ? onNext() : onCheck(); } });
-      inputRow.append(input, checkBtn, hintBtn, skipBtn);
+      inputRow.append(input);
+      card.append(inputRow);
+      actions.append(checkBtn, hintBtn, skipBtn);
+      card.append(actions);
       setTimeout(() => input.focus(), 120);
       state.input = input;
     }
@@ -258,14 +255,16 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
         return chip;
       });
       const clearBtn = el('button', { class: 'btn btn-ghost btn-sm', text: t(L, 'resetWordOrder'), onclick: () => renderExercise() });
-      inputRow.append(clearBtn, checkBtn, hintBtn, skipBtn);
+      card.append(inputRow);
+      actions.append(clearBtn, checkBtn, hintBtn, skipBtn);
+      card.append(actions);
       state.getWordOrder = () => placed.map((p) => p.w).join(' ');
       state.wordOrderComplete = () => placed.length === ex.words.length;
     }
 
     if (ex.type === 'multiple-choice') {
       card.append(el('div', { class: 'prompt-label', text: t(L, 'mcPrompt') }));
-      card.append(el('div', { class: 'sentence-text', text: ex.question }));
+      card.append(el('div', { class: 'sentence-text', dir: 'ltr', text: ex.question }));
       if (settings.showArabic && ex.ar) card.append(el('div', { class: 'sentence-ar', dir: 'rtl', text: ex.ar }));
       const optsBox = el('div', { class: 'mc-options', role: 'listbox' });
       let selected = -1;
@@ -280,11 +279,19 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
         optsBox.append(b);
       });
       card.append(optsBox);
-      inputRow.append(checkBtn, skipBtn);
+      card.append(inputRow);
+      actions.append(checkBtn, skipBtn);
+      card.append(actions);
       state.getSelected = () => selected;
     }
 
-    controls.append(el('span', { class: 'muted small', text: '⏎ = Check / Next' }));
+    // feedback lives inside the same card, right after the actions
+    card.append(feedbackBox);
+    body.append(card);
+
+    body.append(el('p', { class: 'muted small center', style: { marginTop: '.7rem' } }, [
+      el('kbd', { text: '⏎' }), ` = ${t(L, 'checkAnswer')} / ${t(L, 'nextExercise')}`,
+    ]));
     if (!reviewMode && entry) {
       // keep resume position fresh
       saveResume(lessonId, idx);
@@ -325,7 +332,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     else if (ex.type === 'word-order') text = `${ex.words.length} ${t(L, 'words') || 'words'} — ${t(L, 'meaning')}: ${ex.ar}`;
     else if (ex.type === 'multiple-choice') text = ex.hint || `${t(L, 'meaning')}: ${ex.ar}`;
     if (ex.hint) text = `${ex.hint} — ${text}`;
-    body.append(el('div', { class: 'hint-box', dir: 'auto' }, [iconLabel('bulb', text)]));
+    state.card.append(el('div', { class: 'hint-box', dir: 'auto' }, [iconLabel('bulb', text)]));
   }
 
   // ---------- checking ----------
@@ -367,7 +374,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     lastResult = result;
     results[idx] = { status: result.status, ex };
 
-    // feedback UI
+    // feedback UI (rendered inside the sentence card)
     const fb = el('div', { class: `feedback ${fbClass(result.status)}`, role: 'status' });
     const titles = {
       correct: t(L, 'correct'),
@@ -375,7 +382,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       incorrect: t(L, 'incorrect'),
       skipped: t(L, 'incorrect'),
     };
-    fb.append(el('div', { class: 'fb-title' }, [iconLabel(result.status === 'correct' ? 'check' : result.status === 'minor' ? 'alert' : 'close', titles[result.status])]));
+    fb.append(el('div', { class: 'fb-title' }, [iconLabel(result.status === 'correct' ? 'checkCircle' : result.status === 'minor' ? 'alert' : 'xCircle', titles[result.status])]));
 
     if (result.status !== 'correct') {
       const expected = ex.type === 'fill-blank' && result.expectedDisplay ? ex.display.replace('___', ex.blankWord) : ex.en;
@@ -444,7 +451,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     ]);
     state.feedbackBox.replaceChildren(fb);
     persistAnswer(ex, 'skipped');
-    state.checkBtn.replaceWith(el('button', { class: 'btn btn-primary', text: `→ ${t(L, 'nextExercise')}`, onclick: onNext }));
+    state.checkBtn.replaceWith(el('button', { class: 'btn btn-primary', onclick: onNext }, [iconLabel('arrowRight', t(L, 'nextExercise'))]));
   }
 
   function onNext() {
@@ -472,11 +479,9 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
 
     const wrongs = attempted.filter((r) => r.status === 'incorrect' || r.status === 'skipped');
 
-    body.append(el('div', { class: 'card center' }, [
-      el('div', { class: 'state-box', style: { padding: '1rem 0' } }, [
-        el('div', { class: 'big' }, [icon(acc >= 80 ? 'trophy' : 'flame')]),
-        el('h3', { text: reviewMode ? t(L, 'reviewSessionDone') : t(L, 'lessonComplete') }),
-      ]),
+    body.append(el('div', { class: 'done-card center' }, [
+      el('div', { class: 'done-medal' }, [icon(acc >= 80 ? 'trophy' : 'flame')]),
+      el('h3', { text: reviewMode ? t(L, 'reviewSessionDone') : t(L, 'lessonComplete') }),
       el('div', { class: 'summary-score', text: `${acc}%` }),
       el('div', { class: 'muted', text: t(L, 'yourScore') }),
       el('div', { class: 'summary-rows' }, [
@@ -484,7 +489,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
         rowStat(t(L, 'timeSpent'), `${mins} ${t(L, 'minutes')}`),
         wrongs.length ? rowStat(t(L, 'wrongOnes'), String(wrongs.length)) : null,
       ].filter(Boolean)),
-      el('div', { class: 'row', style: { justifyContent: 'center', marginTop: '1.1rem' } }, buildSummaryButtons(wrongs)),
+      el('div', { class: 'card-actions', style: { marginTop: '1.1rem' } }, buildSummaryButtons(wrongs)),
     ]));
 
     function rowStat(k, v) {
@@ -497,12 +502,11 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
         const nextId = nextLessonInSection(lessonId);
         btns.push(el('button', {
           class: 'btn btn-primary',
-          text: `${nextId ? '→ ' : ''}${nextId ? t(L, 'nextLesson') : t(L, 'backToSection')}`,
           onclick: () => nextId ? navigate('lesson', [nextId]) : navigate('section', [lesson.section]),
-        }));
-        btns.push(el('a', { class: 'btn', href: `#/section/${lesson.section}`, text: t(L, 'backToSection') }));
+        }, [iconLabel(nextId ? 'arrowRight' : 'books', nextId ? t(L, 'nextLesson') : t(L, 'backToSection'))]));
+        btns.push(el('a', { class: 'btn', href: `#/section/${lesson.section}` }, [iconLabel('grid', t(L, 'backToSection'))]));
       } else {
-        btns.push(el('button', { class: 'btn btn-primary', text: t(L, 'navReview'), onclick: () => navigate('review') }));
+        btns.push(el('button', { class: 'btn btn-primary', onclick: () => navigate('review') }, [iconLabel('review', t(L, 'navReview'))]));
       }
       return btns;
     }

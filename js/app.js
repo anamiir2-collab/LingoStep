@@ -68,6 +68,8 @@ async function boot() {
 
 function renderShell() {
   const L = currentLang;
+  const s = getSettings();
+  const initial = (s.userName || '').trim().charAt(0).toUpperCase();
   const header = el('header', { class: 'app-header' }, [
     el('div', { class: 'header-inner' }, [
       el('a', { class: 'brand', href: '#/' }, [
@@ -76,12 +78,15 @@ function renderShell() {
       ]),
       el('nav', { class: 'main-nav', 'aria-label': 'Main' }, [
         navLink('navHome', '#/', 'home'),
+        navLink('navSections', '#/sections', 'sections'),
+        navLink('navProgress', '#/progress', 'progress'),
         navLink('navReview', '#/review', 'review'),
-        navLink('navStats', '#/stats', 'stats'),
         navLink('navSettings', '#/settings', 'settings'),
       ]),
       el('button', { class: 'icon-btn', title: t(L, 'interfaceLanguage'), 'aria-label': t(L, 'interfaceLanguage'), text: L === 'ar' ? 'EN' : 'ع', onclick: toggleLanguage }),
       el('button', { class: 'icon-btn', title: t(L, 'theme'), 'aria-label': t(L, 'theme'), onclick: cycleTheme }, [icon('theme')]),
+      el('button', { class: 'avatar-btn', title: t(L, 'avatarLabel'), 'aria-label': t(L, 'avatarLabel'), onclick: () => navigate('settings') },
+        initial ? [el('span', { text: initial, 'aria-hidden': 'true' })] : [icon('user')]),
     ]),
   ]);
 
@@ -90,13 +95,11 @@ function renderShell() {
     el('span', { text: t(L, 'footerNote') }),
   ]);
 
-  // Mobile floating navigation inspired by the supplied reference.
+  // Mobile floating navigation: Home / Sections / Progress.
   const mobileNav = el('nav', { class: 'mobile-bottom-nav', 'aria-label': L === 'ar' ? 'التنقل الرئيسي' : 'Primary navigation' }, [
-    el('span', { class: 'mobile-nav-indicator', 'aria-hidden': 'true' }),
     mobileNavLink('navHome', '#/', 'home', 'home'),
-    mobileNavLink('navReview', '#/review', 'review', 'review'),
-    mobileNavLink('navStats', '#/stats', 'stats', 'stats'),
-    mobileNavLink('navSettings', '#/settings', 'settings', 'settings'),
+    mobileNavLink('navSections', '#/sections', 'sections', 'grid'),
+    mobileNavLink('navProgress', '#/progress', 'progress', 'chart'),
   ]);
 
   appRoot.replaceChildren(header, main, footer, mobileNav);
@@ -120,24 +123,22 @@ function mobileNavLink(labelKey, href, routeName, iconName) {
 }
 
 function updateNavState(routeName) {
+  // Desktop header links highlight per exact destination group.
+  const desktopMap = { home: 'home', sections: 'sections', section: 'sections', lesson: 'sections', progress: 'progress', stats: 'progress', review: 'review', settings: 'settings' };
   document.querySelectorAll('.nav-link').forEach((a) => {
-    if (a.dataset.route === routeName) a.setAttribute('aria-current', 'page');
+    if (a.dataset.route === desktopMap[routeName]) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
 
-  // Lesson and section screens belong to the Home destination.
-  const mobileRoute = ['section', 'lesson'].includes(routeName) ? 'home' : routeName;
-  const mobileLinks = [...document.querySelectorAll('.mobile-nav-link')];
-  let activeIndex = 0;
-  mobileLinks.forEach((a, index) => {
-    const active = a.dataset.route === mobileRoute;
-    if (active) activeIndex = index;
+  // Mobile bar has 3 destinations; review lives under Home, settings under the avatar.
+  const mobileMap = { home: 'home', review: 'home', sections: 'sections', section: 'sections', lesson: 'sections', progress: 'progress', stats: 'progress' };
+  const target = mobileMap[routeName] || '';
+  [...document.querySelectorAll('.mobile-nav-link')].forEach((a) => {
+    const active = a.dataset.route === target;
     a.classList.toggle('is-active', active);
     if (active) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
-  const indicator = document.querySelector('.mobile-nav-indicator');
-  if (indicator) indicator.style.left = `${((activeIndex + 0.5) / mobileLinks.length) * 100}%`;
 }
 
 function toggleLanguage() {
@@ -177,10 +178,11 @@ async function handleRoute(route) {
 
   try {
     if (route.name === 'home') return await viewDashboard(view);
+    if (route.name === 'sections') return await viewSections(view);
     if (route.name === 'section') return await viewSection(view, route.params[0]);
     if (route.name === 'lesson') return await viewLesson(view, route.params[0]);
     if (route.name === 'review') return await viewReview(view);
-    if (route.name === 'stats') return await viewStats(view);
+    if (route.name === 'progress' || route.name === 'stats') return await viewProgress(view);
     if (route.name === 'settings') return await viewSettings(view);
     return await viewDashboard(view);
   } catch (err) {
@@ -199,6 +201,14 @@ function loading(view) {
    Dashboard
    ============================================================ */
 
+function greetingPair() {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return ['greetMorning', 'greetMorningName'];
+  if (h >= 12 && h < 17) return ['greetAfternoon', 'greetAfternoonName'];
+  if (h >= 17 && h < 21) return ['greetEvening', 'greetEveningName'];
+  return ['greetNight', 'greetNightName'];
+}
+
 async function viewDashboard(view) {
   loading(view);
   docTitle('navHome');
@@ -206,63 +216,106 @@ async function viewDashboard(view) {
   const [overview, today, states, due] = await Promise.all([
     getOverview(), getToday(), getAllLessonStates(), dueCount(),
   ]);
-  const manifest = getManifest();
   const settings = getSettings();
 
   const goalPct = pct(today.count, settings.dailyGoal);
+  const goalLeft = Math.max(0, settings.dailyGoal - today.count);
 
-  const hero = el('section', { class: 'hero' }, [
-    el('h1', { text: overview.totalAnswers > 0 ? t(L, 'welcome') : t(L, 'welcomeNew') }),
-    el('p', { text: t(L, 'heroText') }),
-    el('div', { class: 'row' }, [
-      overview.lastLessonId
-        ? el('a', { class: 'btn', href: `#/lesson/${overview.lastLessonId}` }, [iconLabel('play', t(L, 'continueLearning'))])
-        : el('a', { class: 'btn', href: `#/section/basics` }, [iconLabel('play', t(L, 'startLearning'))]),
-      el('a', { class: 'btn btn-ghost', style: { color: '#fff', borderColor: 'rgba(255,255,255,.5)' }, href: '#/review' }, [iconLabel('review', t(L, 'quickReview'))]),
+  // ---- hero: today's plan (personalized, never shows a raw placeholder) ----
+  const name = (settings.userName || '').trim();
+  const [greetKey, greetKeyName] = greetingPair();
+  const greeting = name ? t(L, greetKeyName, { name }) : t(L, greetKey);
+
+  const heroStats = el('div', { class: 'hero-stats' }, [
+    el('div', { class: 'hero-stat' }, [icon('pen'), el('span', { text: `${formatNumber(today.count)} / ${formatNumber(settings.dailyGoal)} ${t(L, 'goalDoneToday')}` })]),
+    el('div', { class: 'hero-stat' }, [icon('clock'), el('span', { text: `${formatDuration(today.timeMs)} ${t(L, 'todayTime')}` })]),
+    el('div', { class: 'hero-stat' }, [icon('flame'), el('span', { text: `${formatNumber(overview.streak)} ${t(L, 'streakDays')}` })]),
+  ]);
+
+  const hero = el('section', { class: 'hero', 'aria-label': t(L, 'todaysPlan') }, [
+    el('span', { class: 'hero-kicker' }, [icon('sparkle'), t(L, 'todaysPlan')]),
+    el('h1', { text: greeting }),
+    el('p', { class: 'hero-sub', text: t(L, 'todaysPlanSub') }),
+    el('div', { class: 'hero-grid' }, [
+      el('div', {
+        class: 'goal-ring',
+        style: { '--pct': String(Math.min(100, goalPct)) },
+        role: 'img',
+        'aria-label': `${goalPct}%`,
+      }, [el('div', { class: 'goal-ring-inner', text: `${goalPct}%` })]),
+      heroStats,
+      el('div', { class: 'hero-actions' }, [
+        overview.lastLessonId
+          ? el('a', { class: 'btn', href: `#/lesson/${overview.lastLessonId}` }, [iconLabel('play', t(L, 'continueWhere'))])
+          : el('a', { class: 'btn', href: `#/section/basics` }, [iconLabel('play', t(L, 'startNow'))]),
+        el('a', { class: 'btn btn-ghost', href: '#/review' }, [iconLabel('review', t(L, 'quickReview'))]),
+      ]),
     ]),
   ]);
 
-  // stats
+  // ---- 2 x 2 stat tiles (real data, real icons, pastel per spec) ----
   const statGrid = el('div', { class: 'stat-grid mb' }, [
-    statCard(overview.completedLessons, t(L, 'completedLessons')),
-    statCard(formatNumber(overview.totalAnswers), t(L, 'practicedSentences')),
-    statCard(`${overview.accuracy}%`, t(L, 'accuracy')),
-    statCard(overview.streak, t(L, 'streakDays')),
+    statCard(formatNumber(overview.completedLessons), t(L, 'completedLessons'), 'books'),
+    statCard(formatNumber(overview.totalAnswers), t(L, 'practicedSentences'), 'pen'),
+    statCard(`${overview.accuracy}%`, t(L, 'accuracy'), 'target'),
+    statCard(formatNumber(overview.streak), t(L, 'streakDays'), 'flame'),
   ]);
 
-  // daily goal card
+  // ---- daily goal card (updates from the same single source of truth) ----
   const goalCard = el('div', { class: 'card' }, [
-    el('h3', { class: 'card-title', text: t(L, 'dailyGoal') }),
-    el('div', { class: 'goal-wrap' }, [
-      el('div', { class: 'goal-ring', style: { '--pct': String(goalPct) }, role: 'img', 'aria-label': `${goalPct}%` }, [
-        el('div', { class: 'goal-ring-inner', text: `${today.count}/${settings.dailyGoal}` }),
-      ]),
+    el('div', { class: 'goal-card-row' }, [
       el('div', { class: 'grow' }, [
-        el('div', { class: 'row-between' }, [
-          el('span', { text: `${today.count} ${t(L, 'goalDoneToday')}` }),
-          el('span', { class: 'muted small', text: `${goalPct}%` }),
-        ]),
-        el('div', { class: 'progress', style: { marginTop: '.45rem' } }, [el('span', { style: { width: `${Math.min(100, goalPct)}%` } })]),
-        el('p', { class: 'muted small', text: t(L, 'installHint') }),
+        el('h3', { class: 'card-title', text: t(L, 'dailyGoal') }),
+        el('p', { class: 'muted small', style: { margin: '0 0 .6rem' }, text: today.count >= settings.dailyGoal ? t(L, 'goalReached') : t(L, 'toGo', { n: formatNumber(goalLeft) }) }),
+        el('div', { class: 'progress', role: 'progressbar', 'aria-valuenow': Math.min(100, goalPct), 'aria-valuemin': 0, 'aria-valuemax': 100 }, [el('span', { style: { width: `${Math.min(100, goalPct)}%` } })]),
       ]),
+      el('span', { class: 'ring-sm', style: { '--pct': String(Math.min(100, goalPct)) }, text: `${today.count}/${settings.dailyGoal}` }),
     ]),
   ]);
 
-  // revision quick access
+  // ---- revision quick access ----
   const reviewCard = el('div', { class: 'card' }, [
     el('div', { class: 'row-between' }, [
-      el('div', {}, [
+      el('div', { class: 'grow', style: { minWidth: '200px' } }, [
         el('h3', { class: 'card-title', style: { margin: 0 }, text: t(L, 'quickReview') }),
+        el('p', { class: 'muted small', style: { margin: '.15rem 0 .5rem' }, text: t(L, 'reviewCardSub') }),
         el('span', { class: due > 0 ? 'chip chip-due' : 'chip', text: due > 0 ? `${due} ${t(L, 'reviewDue')}` : t(L, 'nothingDue') }),
       ]),
-      el('a', { class: 'btn btn-sm', href: '#/review' }, [iconLabel('review', t(L, 'startReview'))]),
+      el('a', { class: 'btn btn-primary', href: '#/review' }, [iconLabel('review', t(L, 'startReview'))]),
     ]),
   ]);
 
-  // sections
-  const sectionHead = el('div', { class: 'section-head' }, [
-    el('h2', { text: t(L, 'yourSections') }),
+  view.replaceChildren(hero, statGrid, goalCard, reviewCard);
+}
+
+function statCard(value, label, iconName) {
+  return el('div', { class: 'stat-card' }, [
+    el('div', { class: 'stat-icon' }, [icon(iconName)]),
+    el('div', { class: 'stat-value', text: String(value) }),
+    el('div', { class: 'stat-label', text: label }),
   ]);
+}
+
+function formatNumber(n) {
+  return new Intl.NumberFormat(currentLang === 'ar' ? 'ar-EG' : 'en-US').format(n);
+}
+
+/* ============================================================
+   Sections (all seven learning paths)
+   ============================================================ */
+
+async function viewSections(view) {
+  loading(view);
+  docTitle('navSections');
+  const L = currentLang;
+  const manifest = getManifest();
+  const states = await getAllLessonStates();
+
+  const head = el('div', { class: 'page-head' }, [
+    el('h2', { text: t(L, 'sectionsTitle') }),
+    el('p', { text: t(L, 'sectionsIntro') }),
+  ]);
+
   const grid = el('div', { class: 'section-grid' });
   for (const meta of SECTIONS_META) {
     const list = manifest.filter((l) => l.section === meta.id);
@@ -272,9 +325,9 @@ async function viewDashboard(view) {
     grid.append(el('a', { class: 'section-card', href: `#/section/${meta.id}` }, [
       el('div', { class: 'row' }, [
         el('span', { class: 'section-icon' }, [icon(meta.icon)]),
-        el('div', {}, [
+        el('div', { class: 'grow' }, [
           el('h3', { text: L === 'ar' ? meta.ar : meta.en }),
-          el('div', { class: 'sub', text: `${list.length} ${t(L, 'lessons')} · ${formatNumber(sentences)} ${t(L, 'sentences')}` }),
+          el('div', { class: 'sub', text: `${t(L, 'sectionLessons', { n: formatNumber(list.length) })} · ${formatNumber(sentences)} ${t(L, 'sentences')}` }),
         ]),
       ]),
       el('div', { class: 'progress' }, [el('span', { style: { width: `${donePct}%` } })]),
@@ -285,18 +338,7 @@ async function viewDashboard(view) {
     ]));
   }
 
-  view.replaceChildren(hero, statGrid, goalCard, reviewCard, sectionHead, grid);
-}
-
-function statCard(value, label) {
-  return el('div', { class: 'stat-card' }, [
-    el('div', { class: 'stat-value', text: String(value) }),
-    el('div', { class: 'stat-label', text: label }),
-  ]);
-}
-
-function formatNumber(n) {
-  return new Intl.NumberFormat(currentLang === 'ar' ? 'ar-EG' : 'en-US').format(n);
+  view.replaceChildren(head, grid);
 }
 
 /* ============================================================
@@ -320,7 +362,7 @@ async function viewSection(view, sectionId) {
     const st = states[entry.id];
     const cls = st?.completed ? 'done' : (st && Object.keys(st.attempted || {}).length ? 'active' : '');
     items.append(el('a', { class: `lesson-item ${cls}`, href: `#/lesson/${entry.id}` }, [
-      el('span', { class: 'lesson-num', text: st?.completed ? '✓' : String(i + 1) }),
+      el('span', { class: 'lesson-num' }, st?.completed ? [icon('check')] : [el('span', { text: String(i + 1) })]),
       el('div', { class: 'lesson-titles' }, [
         el('div', { class: 't', text: entry.title }),
         el('div', { class: 's', text: `${entry.titleAr} · ${entry.level} · ${entry.exercises} ${t(L, 'exercises')}` }),
@@ -330,9 +372,9 @@ async function viewSection(view, sectionId) {
   });
 
   view.replaceChildren(
-    el('div', { class: 'breadcrumb' }, [el('a', { href: '#/', text: t(L, 'navHome') }), ' › ', el('span', { text: L === 'ar' ? meta.ar : meta.en })]),
+    el('div', { class: 'breadcrumb' }, [el('a', { href: '#/sections', text: t(L, 'navSections') }), ' › ', el('span', { text: L === 'ar' ? meta.ar : meta.en })]),
     el('div', { class: 'card' }, [
-      el('div', { class: 'row' }, [el('span', { class: 'section-icon', text: meta.icon })]),
+      el('div', { class: 'row' }, [el('span', { class: 'section-icon' }, [icon(meta.icon)])]),
       el('h2', { text: L === 'ar' ? meta.ar : meta.en, style: { margin: '.4rem 0' } }),
       el('p', { class: 'muted', text: L === 'ar' ? meta.descAr : meta.descEn }),
       el('div', { class: 'progress mt' }, [el('span', { style: { width: `${pct(doneCountAll, list.length)}%` } })]),
@@ -432,66 +474,118 @@ function viewReviewSession(view, items) {
 }
 
 /* ============================================================
-   Stats view
+   Progress view (aliased from the old #/stats route)
    ============================================================ */
 
-async function viewStats(view) {
+async function viewProgress(view) {
   loading(view);
-  docTitle('navStats');
+  docTitle('navProgress');
   const L = currentLang;
   const [overview, history, states] = await Promise.all([
-    getOverview(), getDailyHistory(14), getAllLessonStates(),
+    getOverview(), getDailyHistory(7), getAllLessonStates(),
+  ]);
+  const manifest = getManifest();
+  const totalLessons = manifest.length;
+  const overallPct = pct(overview.completedLessons, totalLessons);
+
+  const head = el('div', { class: 'page-head' }, [
+    el('h2', { text: t(L, 'progressTitle') }),
+    el('p', { text: t(L, 'progressIntro') }),
   ]);
 
-  const maxCount = Math.max(1, ...history.map((h) => h.count));
-  const historyRow = el('div', { class: 'row', style: { alignItems: 'flex-end', gap: '.35rem', minHeight: '90px' } });
-  for (const h of history) {
-    const barH = Math.max(4, Math.round((h.count / maxCount) * 70));
-    historyRow.append(el('div', { style: { flex: '1', textAlign: 'center' }, title: `${h.day}: ${h.count}` }, [
-      el('div', {
-        style: { height: `${barH}px`, background: h.count ? 'var(--primary)' : 'var(--surface-2)', borderRadius: '5px 5px 2px 2px', marginInline: '2px' },
-      }),
-      el('div', { class: 'small muted', style: { fontSize: '.62rem' }, text: h.day.slice(8) }),
-    ]));
-  }
+  // ---- overall progress card (real % from completed lessons) ----
+  const overallCard = el('div', { class: 'card' }, [
+    el('h3', { class: 'card-title', text: t(L, 'overallProgress') }),
+    el('div', { class: 'goal-wrap' }, [
+      el('div', { class: 'big-ring', style: { '--pct': String(overallPct) }, role: 'img', 'aria-label': `${overallPct}%` }, [
+        el('div', { class: 'big-ring-inner' }, [
+          el('div', { class: 'big-ring-value', text: `${overallPct}%` }),
+          el('div', { class: 'big-ring-label', text: t(L, 'courseComplete') }),
+        ]),
+      ]),
+      el('div', { class: 'grow', style: { minWidth: '180px' } }, [
+        el('div', { class: 'summary-rows' }, [
+          rowStat(t(L, 'completedLessons'), `${formatNumber(overview.completedLessons)} / ${formatNumber(totalLessons)}`),
+          rowStat(t(L, 'practicedSentences'), formatNumber(overview.totalAnswers)),
+          rowStat(t(L, 'accuracy'), `${overview.accuracy}%`),
+          rowStat(t(L, 'timeTotal'), formatDuration(overview.studyTimeMs)),
+          rowStat(t(L, 'bestStreak'), `${formatNumber(overview.bestStreak)}`),
+        ]),
+      ]),
+    ]),
+  ]);
 
+  // ---- weekly activity chart (real daily data; honest empty state) ----
+  const weekTotal = history.reduce((s, h) => s + h.count, 0);
+  const maxCount = Math.max(1, ...history.map((h) => h.count));
+  const chartInner = weekTotal === 0
+    ? el('p', { class: 'muted small', style: { margin: '.6rem 0 0' }, text: t(L, 'weeklyEmpty') })
+    : el('div', { class: 'week-chart' }, history.map((h) => {
+        const barH = Math.max(6, Math.round((h.count / maxCount) * 86));
+        const dayLabel = new Date(`${h.day}T12:00:00`).toLocaleDateString(currentLang === 'ar' ? 'ar-EG' : 'en-US', { weekday: 'narrow' });
+        return el('div', { class: 'week-col', title: `${h.day}: ${h.count}` }, [
+          el('span', { class: 'week-val', text: h.count ? formatNumber(h.count) : '' }),
+          el('div', { class: `week-bar${h.count ? '' : ' zero'}`, style: { height: `${barH}px` } }),
+          el('span', { class: 'week-day', text: dayLabel }),
+        ]);
+      }));
+  const weekCard = el('div', { class: 'card' }, [
+    el('div', { class: 'row-between' }, [
+      el('h3', { class: 'card-title', style: { margin: 0 } }, [iconLabel('calendar', t(L, 'weeklyActivity'))]),
+      el('span', { class: 'chip', text: `${formatNumber(weekTotal)} ${t(L, 'goalDoneToday')}` }),
+    ]),
+    chartInner,
+  ]);
+
+  // ---- per-section progress cards (only sections that really exist) ----
+  const sectionListCard = el('div', { class: 'card' }, [
+    el('h3', { class: 'card-title' }, [iconLabel('grid', t(L, 'navSections'))]),
+    el('div', { class: 'lesson-list' }, SECTIONS_META.map((meta) => {
+      const list = manifest.filter((l) => l.section === meta.id);
+      const done = list.filter((l) => states[l.id]?.completed).length;
+      const donePct = pct(done, list.length);
+      return el('a', { class: 'lesson-item', href: `#/section/${meta.id}` }, [
+        el('span', { class: 'section-icon' }, [icon(meta.icon)]),
+        el('div', { class: 'lesson-titles' }, [
+          el('div', { class: 't', text: L === 'ar' ? meta.ar : meta.en }),
+          el('div', { class: 'progress', style: { marginTop: '.35rem' } }, [el('span', { style: { width: `${donePct}%` } })]),
+        ]),
+        el('span', { class: `chip ${donePct === 100 ? 'chip-done' : ''}`, text: `${done}/${list.length}` }),
+      ]);
+    })),
+  ]);
+
+  // ---- recently practiced ----
   const recent = Object.entries(states)
     .sort((a, b) => (b[1].updatedAt || 0) - (a[1].updatedAt || 0))
     .slice(0, 6);
+  const recentCard = recent.length
+    ? el('div', { class: 'card' }, [
+        el('h3', { class: 'card-title', text: t(L, 'recentLessons') }),
+        el('div', { class: 'lesson-list' }, recent.map(([id, st]) => {
+          const m = manifest.find((x) => x.id === id);
+          if (!m) return null;
+          return el('a', { class: 'lesson-item', href: `#/lesson/${id}` }, [
+            el('span', { class: 'lesson-num' }, [icon(st.completed ? 'check' : 'clock')]),
+            el('div', { class: 'lesson-titles' }, [
+              el('div', { class: 't', text: m.title }),
+              el('div', { class: 's', text: `${m.titleAr} · ${st.bestAccuracy || 0}%` }),
+            ]),
+          ]);
+        }).filter(Boolean)),
+      ])
+    : null;
 
-  const recentBox = recent.length
-    ? el('div', { class: 'lesson-list' }, recent.map(([id, st]) => {
-        const m = getManifest().find((x) => x.id === id);
-        if (!m) return null;
-        return el('div', { class: 'lesson-item' }, [
-          el('span', { class: 'lesson-num', text: st.completed ? '✓' : '…' }),
-          el('div', { class: 'lesson-titles' }, [
-            el('div', { class: 't', text: m.title }),
-            el('div', { class: 's', text: `${m.titleAr} · ${st.bestAccuracy || 0}%` }),
-          ]),
-        ]);
-      }).filter(Boolean))
-    : el('p', { class: 'muted', text: t(L, 'noDataYet') });
+  const grid = el('div', { class: 'progress-grid' }, [overallCard, weekCard]);
+  view.replaceChildren(head, grid, sectionListCard, ...(recentCard ? [recentCard] : []));
 
-  view.replaceChildren(
-    el('h2', {}, [iconLabel('chart', t(L, 'statsTitle'))]),
-    el('div', { class: 'stat-grid mt mb' }, [
-      statCard(formatNumber(overview.totalAnswers), t(L, 'totalAttempts')),
-      statCard(formatNumber(overview.correctAnswers), t(L, 'correctAnswers')),
-      statCard(`${overview.accuracy}%`, t(L, 'accuracy')),
-      statCard(formatDuration(overview.studyTimeMs), t(L, 'timeTotal')),
-    ]),
-    el('div', { class: 'card' }, [
-      el('h3', { class: 'card-title', text: t(L, 'dailyHistory') }),
-      historyRow,
-      el('p', { class: 'small muted', text: `${t(L, 'streakDays')}: ${overview.streak} · Best: ${overview.bestStreak}` }),
-    ]),
-    el('div', { class: 'card' }, [
-      el('h3', { class: 'card-title', text: t(L, 'recentLessons') }),
-      recentBox,
-    ]),
-  );
+  function rowStat(k, v) {
+    return el('div', { class: 'row-between' }, [el('span', { class: 'muted', text: k }), el('b', { text: v })]);
+  }
 }
+
+/* backwards-compatible alias for any external references */
+const viewStats = viewProgress;
 
 /* ============================================================
    Settings view
@@ -521,6 +615,13 @@ async function viewSettings(view) {
 
   const goalInput = el('input', { type: 'number', min: '5', max: '200', value: String(s.dailyGoal), style: { maxWidth: '110px' }, 'aria-label': t(L, 'dailyGoalSetting') });
   goalInput.addEventListener('change', () => { saveSettings({ dailyGoal: parseInt(goalInput.value, 10) || 20 }); toast(t(L, 'dataSaved')); });
+
+  const nameInput = el('input', { type: 'text', maxlength: '24', value: s.userName || '', placeholder: t(L, 'namePlaceholder'), 'aria-label': t(L, 'yourName') });
+  nameInput.addEventListener('change', () => {
+    saveSettings({ userName: nameInput.value });
+    toast(t(L, 'dataSaved'));
+    renderShell(); // refresh avatar initial immediately
+  });
 
   const arabicToggle = toggle(s.showArabic, (on) => saveSettings({ showArabic: on }));
   const strictToggle = toggle(s.strictGrading, (on) => saveSettings({ strictGrading: on }));
@@ -602,6 +703,7 @@ async function viewSettings(view) {
   view.replaceChildren(
     el('h2', {}, [iconLabel('settings', t(L, 'settingsTitle'))]),
     el('div', { class: 'card mt' }, [
+      settingRow(t(L, 'yourName'), null, nameInput),
       settingRow(t(L, 'interfaceLanguage'), null, langSel),
       settingRow(t(L, 'theme'), null, themeSel),
       settingRow(t(L, 'dailyGoalSetting'), null, goalInput),
