@@ -91,6 +91,7 @@ function renderShell() {
 
   // Mobile floating navigation inspired by the supplied reference.
   const mobileNav = el('nav', { class: 'mobile-bottom-nav', 'aria-label': L === 'ar' ? 'التنقل الرئيسي' : 'Primary navigation' }, [
+    el('span', { class: 'mobile-nav-indicator', 'aria-hidden': 'true' }),
     mobileNavLink('navHome', '#/', 'home', '⌂'),
     mobileNavLink('navReview', '#/review', 'review', '↻'),
     mobileNavLink('navStats', '#/stats', 'stats', '▥'),
@@ -125,12 +126,17 @@ function updateNavState(routeName) {
 
   // Lesson and section screens belong to the Home destination.
   const mobileRoute = ['section', 'lesson'].includes(routeName) ? 'home' : routeName;
-  document.querySelectorAll('.mobile-nav-link').forEach((a) => {
+  const mobileLinks = [...document.querySelectorAll('.mobile-nav-link')];
+  let activeIndex = 0;
+  mobileLinks.forEach((a, index) => {
     const active = a.dataset.route === mobileRoute;
+    if (active) activeIndex = index;
     a.classList.toggle('is-active', active);
     if (active) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
+  const indicator = document.querySelector('.mobile-nav-indicator');
+  if (indicator) indicator.style.left = `${((activeIndex + 0.5) / mobileLinks.length) * 100}%`;
 }
 
 function toggleLanguage() {
