@@ -89,7 +89,15 @@ function renderShell() {
     el('span', { text: t(L, 'footerNote') }),
   ]);
 
-  appRoot.replaceChildren(header, main, footer);
+  // Mobile floating navigation inspired by the supplied reference.
+  const mobileNav = el('nav', { class: 'mobile-bottom-nav', 'aria-label': L === 'ar' ? 'التنقل الرئيسي' : 'Primary navigation' }, [
+    mobileNavLink('navHome', '#/', 'home', '⌂'),
+    mobileNavLink('navReview', '#/review', 'review', '↻'),
+    mobileNavLink('navStats', '#/stats', 'stats', '▥'),
+    mobileNavLink('navSettings', '#/settings', 'settings', '⚙'),
+  ]);
+
+  appRoot.replaceChildren(header, main, footer, mobileNav);
 }
 
 function navLink(labelKey, href, routeName) {
@@ -97,9 +105,30 @@ function navLink(labelKey, href, routeName) {
   return a;
 }
 
+function mobileNavLink(labelKey, href, routeName, icon) {
+  return el('a', {
+    class: 'mobile-nav-link',
+    href,
+    'aria-label': t(currentLang, labelKey),
+    'data-route': routeName,
+  }, [
+    el('span', { class: 'mobile-nav-icon', text: icon, 'aria-hidden': 'true' }),
+    el('span', { class: 'mobile-nav-label', text: t(currentLang, labelKey) }),
+  ]);
+}
+
 function updateNavState(routeName) {
   document.querySelectorAll('.nav-link').forEach((a) => {
     if (a.dataset.route === routeName) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
+  });
+
+  // Lesson and section screens belong to the Home destination.
+  const mobileRoute = ['section', 'lesson'].includes(routeName) ? 'home' : routeName;
+  document.querySelectorAll('.mobile-nav-link').forEach((a) => {
+    const active = a.dataset.route === mobileRoute;
+    a.classList.toggle('is-active', active);
+    if (active) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
 }
