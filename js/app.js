@@ -5,6 +5,7 @@
    ============================================================ */
 
 import { el, $, pct, formatDuration } from './utils.js';
+import { icon, iconLabel } from './icons.js';
 import { t } from './i18n.js';
 import { getSettings, saveSettings, applyDocumentSettings } from './settings.js';
 import { start as startRouter, onChange, navigate, docTitle } from './router.js';
@@ -15,13 +16,13 @@ import { dueCount, dueItems, availableTags, totalCount as reviewTotalCount } fro
 import { isSupported as speechSupported, loadVoices, englishVoices, speak } from './speech.js';
 
 const SECTIONS_META = [
-  { id: 'basics', icon: '🧱', en: 'Basics & Sentence Structure', ar: 'الأساسيات وبناء الجملة', descEn: 'SVO order, pronouns, articles, plurals, adjectives, prepositions', descAr: 'ترتيب الجملة، الضمائر، أدوات التعريف، الجمع، الصفات، حروف الجر' },
-  { id: 'tenses', icon: '⏳', en: 'English 16 Tenses Mastery', ar: 'إتقان الأزمنة الستة عشر', descEn: 'All 16 tense/aspect forms with clear contrast practice', descAr: 'كل صيغ الأزمنة الستة عشر مع تدريب مقارن واضح' },
-  { id: 'grammar', icon: '🧩', en: 'Grammar, Questions & Negation', ar: 'القواعد والأسئلة والنفي', descEn: 'Questions, modals, conditionals, passive, reported speech', descAr: 'الأسئلة، الأفعال الناقصة، الشرط، المبني للمجهول، الكلام المنقول' },
-  { id: 'conversations', icon: '💬', en: 'Daily English Conversations', ar: 'المحادثات اليومية', descEn: 'Greetings, family, shopping, food, phone calls, opinions', descAr: 'التحيات، العائلة، التسوق، الطعام، الهاتف، آراء وتفضيلات' },
-  { id: 'practical-scenarios', icon: '🧭', en: 'Travel, Work & Practical Situations', ar: 'السفر والعمل والمواقف العملية', descEn: 'Airports, hotels, directions, meetings, interviews, emergencies', descAr: 'المطارات، الفنادق، الاتجاهات، الاجتماعات، المقابلات، الطوارئ' },
-  { id: 'vocabulary', icon: '📚', en: 'Vocabulary & Common Expressions', ar: 'المفردات والتعبيرات الشائعة', descEn: 'High-frequency words, phrasal verbs, collocations, idioms', descAr: 'مفردات شائعة، أفعال مركبة، متلازمات لفظية، تعبيرات اصطلاحية' },
-  { id: 'listening-writing', icon: '🎧', en: 'Listening, Dictation & Writing', ar: 'الاستماع والإملاء والكتابة', descEn: 'Dictation, paragraphs, punctuation, correction, reordering', descAr: 'إملاء، فقرات قصيرة، ترقيم، تصحيح، ترتيب الكلمات' },
+  { id: 'basics', icon: 'basics', en: 'Basics & Sentence Structure', ar: 'الأساسيات وبناء الجملة', descEn: 'SVO order, pronouns, articles, plurals, adjectives, prepositions', descAr: 'ترتيب الجملة، الضمائر، أدوات التعريف، الجمع، الصفات، حروف الجر' },
+  { id: 'tenses', icon: 'hourglass', en: 'English 16 Tenses Mastery', ar: 'إتقان الأزمنة الستة عشر', descEn: 'All 16 tense/aspect forms with clear contrast practice', descAr: 'كل صيغ الأزمنة الستة عشر مع تدريب مقارن واضح' },
+  { id: 'grammar', icon: 'grammar', en: 'Grammar, Questions & Negation', ar: 'القواعد والأسئلة والنفي', descEn: 'Questions, modals, conditionals, passive, reported speech', descAr: 'الأسئلة، الأفعال الناقصة، الشرط، المبني للمجهول، الكلام المنقول' },
+  { id: 'conversations', icon: 'conversation', en: 'Daily English Conversations', ar: 'المحادثات اليومية', descEn: 'Greetings, family, shopping, food, phone calls, opinions', descAr: 'التحيات، العائلة، التسوق، الطعام، الهاتف، آراء وتفضيلات' },
+  { id: 'practical-scenarios', icon: 'compass', en: 'Travel, Work & Practical Situations', ar: 'السفر والعمل والمواقف العملية', descEn: 'Airports, hotels, directions, meetings, interviews, emergencies', descAr: 'المطارات، الفنادق، الاتجاهات، الاجتماعات، المقابلات، الطوارئ' },
+  { id: 'vocabulary', icon: 'book', en: 'Vocabulary & Common Expressions', ar: 'المفردات والتعبيرات الشائعة', descEn: 'High-frequency words, phrasal verbs, collocations, idioms', descAr: 'مفردات شائعة، أفعال مركبة، متلازمات لفظية، تعبيرات اصطلاحية' },
+  { id: 'listening-writing', icon: 'headphones', en: 'Listening, Dictation & Writing', ar: 'الاستماع والإملاء والكتابة', descEn: 'Dictation, paragraphs, punctuation, correction, reordering', descAr: 'إملاء، فقرات قصيرة، ترقيم، تصحيح، ترتيب الكلمات' },
 ];
 
 let appRoot = null;
@@ -80,7 +81,7 @@ function renderShell() {
         navLink('navSettings', '#/settings', 'settings'),
       ]),
       el('button', { class: 'icon-btn', title: t(L, 'interfaceLanguage'), 'aria-label': t(L, 'interfaceLanguage'), text: L === 'ar' ? 'EN' : 'ع', onclick: toggleLanguage }),
-      el('button', { class: 'icon-btn', title: t(L, 'theme'), 'aria-label': t(L, 'theme'), text: '◐', onclick: cycleTheme }),
+      el('button', { class: 'icon-btn', title: t(L, 'theme'), 'aria-label': t(L, 'theme'), onclick: cycleTheme }, [icon('theme')]),
     ]),
   ]);
 
@@ -92,10 +93,10 @@ function renderShell() {
   // Mobile floating navigation inspired by the supplied reference.
   const mobileNav = el('nav', { class: 'mobile-bottom-nav', 'aria-label': L === 'ar' ? 'التنقل الرئيسي' : 'Primary navigation' }, [
     el('span', { class: 'mobile-nav-indicator', 'aria-hidden': 'true' }),
-    mobileNavLink('navHome', '#/', 'home', '⌂'),
-    mobileNavLink('navReview', '#/review', 'review', '↻'),
-    mobileNavLink('navStats', '#/stats', 'stats', '▥'),
-    mobileNavLink('navSettings', '#/settings', 'settings', '⚙'),
+    mobileNavLink('navHome', '#/', 'home', 'home'),
+    mobileNavLink('navReview', '#/review', 'review', 'review'),
+    mobileNavLink('navStats', '#/stats', 'stats', 'stats'),
+    mobileNavLink('navSettings', '#/settings', 'settings', 'settings'),
   ]);
 
   appRoot.replaceChildren(header, main, footer, mobileNav);
@@ -106,14 +107,14 @@ function navLink(labelKey, href, routeName) {
   return a;
 }
 
-function mobileNavLink(labelKey, href, routeName, icon) {
+function mobileNavLink(labelKey, href, routeName, iconName) {
   return el('a', {
     class: 'mobile-nav-link',
     href,
     'aria-label': t(currentLang, labelKey),
     'data-route': routeName,
   }, [
-    el('span', { class: 'mobile-nav-icon', text: icon, 'aria-hidden': 'true' }),
+    icon(iconName, 'mobile-nav-icon'),
     el('span', { class: 'mobile-nav-label', text: t(currentLang, labelKey) }),
   ]);
 }
@@ -155,7 +156,7 @@ function cycleTheme() {
   saveSettings({ theme: next });
   applyDocumentSettings();
   import('./utils.js').then(({ toast }) =>
-    toast(next === 'light' ? '☀️ light' : next === 'dark' ? '🌙 dark' : '🖥 system', 1400));
+    toast(next === 'light' ? 'Light' : next === 'dark' ? 'Dark' : 'System', 1400));
 }
 
 function onChangeRerun() {
@@ -211,13 +212,13 @@ async function viewDashboard(view) {
   const goalPct = pct(today.count, settings.dailyGoal);
 
   const hero = el('section', { class: 'hero' }, [
-    el('h1', { text: overview.totalAnswers > 0 ? `${t(L, 'welcome')} 👋` : `${t(L, 'welcomeNew')} 👋` }),
+    el('h1', { text: overview.totalAnswers > 0 ? t(L, 'welcome') : t(L, 'welcomeNew') }),
     el('p', { text: t(L, 'heroText') }),
     el('div', { class: 'row' }, [
       overview.lastLessonId
-        ? el('a', { class: 'btn', href: `#/lesson/${overview.lastLessonId}`, text: `▶ ${t(L, 'continueLearning')}` })
-        : el('a', { class: 'btn', href: `#/section/basics`, text: `▶ ${t(L, 'startLearning')}` }),
-      el('a', { class: 'btn btn-ghost', style: { color: '#fff', borderColor: 'rgba(255,255,255,.5)' }, href: '#/review', text: `🔁 ${t(L, 'quickReview')}` }),
+        ? el('a', { class: 'btn', href: `#/lesson/${overview.lastLessonId}` }, [iconLabel('play', t(L, 'continueLearning'))])
+        : el('a', { class: 'btn', href: `#/section/basics` }, [iconLabel('play', t(L, 'startLearning'))]),
+      el('a', { class: 'btn btn-ghost', style: { color: '#fff', borderColor: 'rgba(255,255,255,.5)' }, href: '#/review' }, [iconLabel('review', t(L, 'quickReview'))]),
     ]),
   ]);
 
@@ -226,7 +227,7 @@ async function viewDashboard(view) {
     statCard(overview.completedLessons, t(L, 'completedLessons')),
     statCard(formatNumber(overview.totalAnswers), t(L, 'practicedSentences')),
     statCard(`${overview.accuracy}%`, t(L, 'accuracy')),
-    statCard(overview.streak, `${t(L, 'streakDays')} 🔥`),
+    statCard(overview.streak, t(L, 'streakDays')),
   ]);
 
   // daily goal card
@@ -254,7 +255,7 @@ async function viewDashboard(view) {
         el('h3', { class: 'card-title', style: { margin: 0 }, text: t(L, 'quickReview') }),
         el('span', { class: due > 0 ? 'chip chip-due' : 'chip', text: due > 0 ? `${due} ${t(L, 'reviewDue')}` : t(L, 'nothingDue') }),
       ]),
-      el('a', { class: 'btn btn-sm', href: '#/review', text: `🔁 ${t(L, 'startReview')}` }),
+      el('a', { class: 'btn btn-sm', href: '#/review' }, [iconLabel('review', t(L, 'startReview'))]),
     ]),
   ]);
 
@@ -270,7 +271,7 @@ async function viewDashboard(view) {
     const donePct = pct(done, list.length);
     grid.append(el('a', { class: 'section-card', href: `#/section/${meta.id}` }, [
       el('div', { class: 'row' }, [
-        el('span', { class: 'section-icon', text: meta.icon }),
+        el('span', { class: 'section-icon' }, [icon(meta.icon)]),
         el('div', {}, [
           el('h3', { text: L === 'ar' ? meta.ar : meta.en }),
           el('div', { class: 'sub', text: `${list.length} ${t(L, 'lessons')} · ${formatNumber(sentences)} ${t(L, 'sentences')}` }),
@@ -368,22 +369,22 @@ async function viewReview(view) {
   };
 
   const head = el('div', { class: 'card' }, [
-    el('h2', { text: `🔁 ${t(L, 'reviewTitle')}` }),
+    el('h2', {}, [iconLabel('review', t(L, 'reviewTitle'))]),
     el('p', { class: 'muted', text: t(L, 'reviewIntro') }),
     el('div', { class: 'row mt' }, [
       el('button', {
         class: 'btn btn-primary',
-        text: `▶ ${t(L, 'startReview')} (${due.length})`,
+        
         disabled: due.length === 0,
         onclick: () => startSession(due.slice(0, 15).map((d) => ({ exerciseId: d.exerciseId, lessonId: d.lessonId, tags: d.tags }))),
-      }),
+      }, [iconLabel('play', `${t(L, 'startReview')} (${due.length})`)]),
       el('span', { class: 'chip', text: `${total} ${t(L, 'reviewTitle')}` }),
     ]),
   ]);
 
   if (total === 0) {
     view.replaceChildren(head, el('div', { class: 'state-box' }, [
-      el('div', { class: 'big', text: '🌱' }),
+      el('div', { class: 'big' }, [icon('leaf')]),
       el('h3', { text: t(L, 'reviewEmpty') }),
       el('a', { class: 'btn btn-primary mt', href: '#/', text: t(L, 'startLearning') }),
     ]));
@@ -473,7 +474,7 @@ async function viewStats(view) {
     : el('p', { class: 'muted', text: t(L, 'noDataYet') });
 
   view.replaceChildren(
-    el('h2', { text: `📊 ${t(L, 'statsTitle')}` }),
+    el('h2', {}, [iconLabel('chart', t(L, 'statsTitle'))]),
     el('div', { class: 'stat-grid mt mb' }, [
       statCard(formatNumber(overview.totalAnswers), t(L, 'totalAttempts')),
       statCard(formatNumber(overview.correctAnswers), t(L, 'correctAnswers')),
@@ -483,7 +484,7 @@ async function viewStats(view) {
     el('div', { class: 'card' }, [
       el('h3', { class: 'card-title', text: t(L, 'dailyHistory') }),
       historyRow,
-      el('p', { class: 'small muted', text: `🔥 ${t(L, 'streakDays')}: ${overview.streak} · ★ ${overview.bestStreak}` }),
+      el('p', { class: 'small muted', text: `${t(L, 'streakDays')}: ${overview.streak} · Best: ${overview.bestStreak}` }),
     ]),
     el('div', { class: 'card' }, [
       el('h3', { class: 'card-title', text: t(L, 'recentLessons') }),
@@ -543,9 +544,9 @@ async function viewSettings(view) {
     }
   }
   voiceSel.addEventListener('change', () => saveSettings({ voiceURI: voiceSel.value }));
-  const testVoiceBtn = el('button', { class: 'btn btn-sm', text: '🔊 Test', onclick: () => speak('Hello! This is LingoStep, your English practice partner.', { voiceURI: voiceSel.value, rate: parseFloat(rateSel.value) }) });
+  const testVoiceBtn = el('button', { class: 'btn btn-sm', onclick: () => speak('Hello! This is LingoStep, your English practice partner.', { voiceURI: voiceSel.value, rate: parseFloat(rateSel.value) }) }, [iconLabel('audio', 'Test')]);
 
-  const exportBtn = el('button', { class: 'btn', text: `⬇ ${t(L, 'exportProgress')}`, onclick: async () => {
+  const exportBtn = el('button', { class: 'btn', onclick: async () => {
     const backup = await exportBackup();
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -553,10 +554,10 @@ async function viewSettings(view) {
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
     toast(t(L, 'dataExported'));
-  } });
+  } }, [iconLabel('download', t(L, 'exportProgress'))]);
 
   const importInput = el('input', { type: 'file', accept: 'application/json,.json', class: 'sr-only' });
-  const importBtn = el('button', { class: 'btn', text: `⬆ ${t(L, 'importProgress')}`, onclick: () => importInput.click() });
+  const importBtn = el('button', { class: 'btn', onclick: () => importInput.click() }, [iconLabel('upload', t(L, 'importProgress'))]);
   importInput.addEventListener('change', async () => {
     const file = importInput.files && importInput.files[0];
     if (!file) return;
@@ -574,17 +575,17 @@ async function viewSettings(view) {
     importInput.value = '';
   });
 
-  const clearBtn = el('button', { class: 'btn btn-danger', text: `🗑 ${t(L, 'clearProgress')}`, onclick: async () => {
+  const clearBtn = el('button', { class: 'btn btn-danger', onclick: async () => {
     if (typeof confirm !== 'undefined' && !confirm(t(L, 'clearConfirm'))) return;
     await clearAllProgress();
     toast(t(L, 'dataSaved'));
     setTimeout(() => onChangeRerun(), 500);
-  } });
+  } }, [iconLabel('trash', t(L, 'clearProgress'))]);
 
   // offline preparation
-  const offlineBtn = el('button', { class: 'btn', text: `📦 ${t(L, 'prepareOffline')}`, onclick: async () => {
+  const offlineBtn = el('button', { class: 'btn', onclick: async () => {
     offlineBtn.disabled = true;
-    offlineBtn.textContent = `⏳ ${t(L, 'preparingOffline')}`;
+    offlineBtn.replaceChildren(iconLabel('clock', t(L, 'preparingOffline')));
     const manifest = getManifest();
     let ok = 0;
     for (const entry of manifest) {
@@ -594,12 +595,12 @@ async function viewSettings(view) {
         ok += 1;
       } catch { /* offline already or failed */ }
     }
-    offlineBtn.textContent = `✅ ${ok}/${manifest.length}`;
+    offlineBtn.replaceChildren(iconLabel('check', `${ok}/${manifest.length}`));
     toast(t(L, 'offlineReady'));
-  } });
+  } }, [iconLabel('package', t(L, 'prepareOffline'))]);
 
   view.replaceChildren(
-    el('h2', { text: `⚙️ ${t(L, 'settingsTitle')}` }),
+    el('h2', {}, [iconLabel('settings', t(L, 'settingsTitle'))]),
     el('div', { class: 'card mt' }, [
       settingRow(t(L, 'interfaceLanguage'), null, langSel),
       settingRow(t(L, 'theme'), null, themeSel),
@@ -608,23 +609,23 @@ async function viewSettings(view) {
       settingRow(t(L, 'strictGrading'), null, strictToggle),
     ]),
     el('div', { class: 'card' }, [
-      el('h3', { class: 'card-title', text: `🔊 ${t(L, 'speechSection')}` }),
+      el('h3', { class: 'card-title' }, [iconLabel('audio', t(L, 'speechSection'))]),
       settingRow(t(L, 'voice'), null, voiceSel),
       settingRow(t(L, 'speechRate'), null, el('div', { class: 'row' }, [rateSel, testVoiceBtn])),
       el('p', { class: 'small muted', text: t(L, 'speechNote') }),
     ]),
     el('div', { class: 'card' }, [
-      el('h3', { class: 'card-title', text: `📦 ${t(L, 'offlineSection')}` }),
+      el('h3', { class: 'card-title' }, [iconLabel('package', t(L, 'offlineSection'))]),
       el('div', { class: 'row' }, [offlineBtn]),
       el('p', { class: 'small muted', text: t(L, 'offlineNote') }),
     ]),
     el('div', { class: 'card' }, [
-      el('h3', { class: 'card-title', text: `💾 ${t(L, 'backupSection')}` }),
+      el('h3', { class: 'card-title' }, [iconLabel('download', t(L, 'backupSection'))]),
       el('div', { class: 'row' }, [exportBtn, importBtn, importInput]),
       el('p', { class: 'small muted', text: t(L, 'importWarn') }),
     ]),
     el('div', { class: 'card' }, [
-      el('h3', { class: 'card-title', text: `⚠️ ${t(L, 'dangerZone')}` }),
+      el('h3', { class: 'card-title' }, [iconLabel('alert', t(L, 'dangerZone'))]),
       clearBtn,
     ]),
   );
