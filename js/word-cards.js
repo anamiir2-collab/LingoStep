@@ -331,86 +331,62 @@ export function analyzeSentence(sentence, vocab = []) {
 /* ---------- DOM rendering ---------- */
 
 /**
- * Render tappable word chips + one detail card.
- * tokens: analyzeSentence() output.
- * opts: { speak: (text)=>void, labels: { wordInfo, meaning, partOfSpeech, unknown, listen } }
- * Returns a DOM element.
+ * Render every sentence token as its own complete word card.
+ * Each card shows English, IPA when known, part of speech, Arabic meaning,
+ * and an optional pronunciation button.
  */
 export function renderWordCards(tokens, opts = {}) {
   const labels = opts.labels || {};
   const root = document.createElement('div');
   root.className = 'word-cards';
-  const detail = document.createElement('div');
-  detail.className = 'word-card-detail';
-  detail.hidden = true;
+  const grid = document.createElement('div');
+  grid.className = 'wc-card-grid';
 
-  let activeBtn = null;
-
-  function showCard(token, btn) {
-    if (activeBtn) activeBtn.classList.remove('wc-active');
-    activeBtn = btn;
-    btn.classList.add('wc-active');
-    detail.replaceChildren();
+  for (const token of tokens) {
+    const card = document.createElement('article');
+    card.className = 'wc-word-card';
     const head = document.createElement('div');
-    head.className = 'wc-head';
-    const wordEl = document.createElement('span');
-    wordEl.className = 'wc-word';
-    wordEl.dir = 'ltr';
-    wordEl.textContent = token.text;
-    head.append(wordEl);
+    head.className = 'wc-word-card-head';
+
+    const word = document.createElement('strong');
+    word.className = 'wc-word';
+    word.dir = 'ltr';
+    word.textContent = token.raw || token.text;
+    head.append(word);
+
     if (typeof opts.speak === 'function') {
       const say = document.createElement('button');
       say.type = 'button';
       say.className = 'wc-speak';
       say.setAttribute('aria-label', labels.listen || 'Listen');
+      say.title = labels.listen || 'Listen';
       say.textContent = '🔊';
-      say.addEventListener('click', () => opts.speak(token.text));
+      say.addEventListener('click', () => opts.speak(token.text || token.raw));
       head.append(say);
     }
-    detail.append(head);
+    card.append(head);
 
-    const posLine = document.createElement('div');
-    posLine.className = 'wc-pos';
-    posLine.textContent = token.posAr
+    const pos = document.createElement('div');
+    pos.className = 'wc-pos';
+    pos.textContent = token.posAr
       ? `${labels.partOfSpeech || 'Part of speech'}: ${token.posAr} (${token.posEn})`
       : `${labels.partOfSpeech || 'Part of speech'}: ${labels.unknown || 'not determined'}`;
-    detail.append(posLine);
+    card.append(pos);
 
-    if (token.phonetic) {
-      const ph = document.createElement('div');
-      ph.className = 'wc-phonetic';
-      ph.dir = 'ltr';
-      ph.textContent = token.phonetic;
-      detail.append(ph);
-    }
-    if (token.meaningAr) {
-      const mn = document.createElement('div');
-      mn.className = 'wc-meaning';
-      mn.textContent = `${labels.meaning || 'Meaning'}: ${token.meaningAr}`;
-      mn.dir = 'rtl';
-      detail.append(mn);
-    } else if (!token.posAr) {
-      const unk = document.createElement('div');
-      unk.className = 'wc-meaning muted';
-      unk.textContent = labels.noAnalysis || 'No analysis available for this word.';
-      unk.dir = 'rtl';
-      detail.append(unk);
-    }
-    detail.hidden = false;
+    const phonetic = document.createElement('div');
+    phonetic.className = 'wc-phonetic';
+    phonetic.dir = 'ltr';
+    phonetic.textContent = token.phonetic || '—';
+    card.append(phonetic);
+
+    const meaning = document.createElement('div');
+    meaning.className = 'wc-meaning';
+    meaning.dir = 'rtl';
+    meaning.textContent = token.meaningAr || labels.noAnalysis || 'لا توجد ترجمة متاحة';
+    card.append(meaning);
+    grid.append(card);
   }
 
-  const chips = document.createElement('div');
-  chips.className = 'wc-chips';
-  for (const token of tokens) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'wc-chip';
-    b.dir = 'ltr';
-    b.textContent = token.raw;
-    b.addEventListener('click', () => showCard(token, b));
-    chips.append(b);
-  }
-
-  root.append(chips, detail);
+  root.append(grid);
   return root;
 }
