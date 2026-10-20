@@ -6,6 +6,12 @@ LingoStep is a free, offline-friendly English learning web app. Listen to Englis
 - **6,825 exercises** carrying **6,049 verified unique practice sentences** (dictation, gap-fill and word-order)
 - **Zero runtime dependencies** — plain HTML/CSS/JS ES modules, no build step
 - **Browser-native speech** (Web Speech API) — no paid API, no keys
+- **XP system with anti-double-award ledger** — first-try 10 XP, hint-assisted 5 XP, lesson bonus 20 XP; reloads and repeated lessons never re-award
+- **57 Arabic motivational messages** in a standalone data file, `{name}`-aware, grouped by context
+- **Interactive on-screen keyboard** (A–Z, Shift, Space, Backspace, Clear, Enter) that edits the real input at the caret — native keyboards keep working
+- **Word-level answer feedback** — green/red/orange tokens show exactly which word was wrong or missing
+- **Sentence analysis word cards** — tap any word for its part of speech (10 classes, Arabic names), verified phonetics only, meaning, and pronunciation
+- **Vocabulary hub** — browse and practice only words from lessons you actually practiced
 - **Installable PWA** with offline support and service-worker caching
 - **IndexedDB progress** with export/import backups
 
@@ -110,7 +116,7 @@ Open <http://localhost:8080>, pick a section, press **Listen**, type what you he
 npm run validate           # structure + PWA + lessons + duplicates (CI gate)
 npm run validate:lessons   # content only
 npm run detect:duplicates  # exact-dup check + similarity report
-npm test                   # 4 test suites: grading, storage/progress/review, navigation/paths, all 123 lessons
+npm test                   # 7 test suites: grading, storage/progress/review, navigation/paths, lessons, XP, motivation, word cards
 npm run build:content      # regenerate all lessons + manifest from scripts/content/
 ```
 
@@ -156,8 +162,12 @@ LingoStep/
 ├── css/                        # style.css, themes.css, responsive.css
 ├── js/                         # app, router, lesson-loader, lesson-engine,
 │                               # speech, grading, progress, review, storage,
-│                               # settings, i18n, utils, lesson-schema
-├── data/lesson-manifest.js     # registry of all lessons
+│                               # settings, i18n, utils, lesson-schema,
+│                               # keyboard (on-screen), xp (rewards),
+│                               # motivation, word-cards, vocabulary
+├── data/
+│   ├── lesson-manifest.js      # registry of all lessons
+│   └── motivational-messages.js # 57 Arabic messages ({name}-aware)
 ├── lessons/                    # 7 section folders, one .js file per lesson
 │   ├── basics/                 # lesson-001 … lesson-012
 │   ├── tenses/                 # lesson-013 … lesson-036
@@ -175,7 +185,8 @@ LingoStep/
 │   └── content/                # content engine + generators
 │       ├── lib/                # builder, conjugations, banks
 │       └── gen-*.js            # deterministic curriculum generators
-├── tests/                      # grading, storage, navigation, lesson tests
+├── tests/                      # grading, storage, navigation, lesson, xp,
+│                               # motivation, word-cards tests
 └── .github/workflows/          # validate.yml (PRs), deploy.yml (Pages)
 ```
 
