@@ -81,6 +81,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
   const firstAttemptMap = new Map(); // exerciseId -> false once answered wrong/skipped
   const hintUsedSet = new Set();     // exerciseIds where a hint was opened
   let keyboardHandle = null;         // { destroy } for the on-screen keyboard
+  let exerciseTimerId = null;
 
   // resume (normal lessons only)
   if (!reviewMode) {
@@ -155,6 +156,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
 
   // ---------- main exercise render ----------
   function renderExercise() {
+    if (exerciseTimerId) { clearInterval(exerciseTimerId); exerciseTimerId = null; }
     checked = false;
     lastResult = null;
     exStart = Date.now();
@@ -175,6 +177,37 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
         ]),
       ]),
     );
+
+    if (ex.type === 'listen-and-type') {
+      const streak = (() => {
+        let n = 0;
+        for (let i = idx - 1; i >= 0 && results[i]?.status === 'correct'; i--) n++;
+        return n;
+      })();
+      const hud = el('div', { class: 'lw-session-hud', 'aria-label': L === 'ar' ? 'إحصائيات التمرين' : 'Exercise stats' });
+      const timerValue = el('strong', { text: '01:00' });
+      const timerLabel = L === 'ar' ? 'الوقت' : 'Time';
+      const pointsLabel = L === 'ar' ? 'النقاط' : 'Points';
+      const streakLabel = L === 'ar' ? 'السلسلة' : 'Streak';
+      const pointsValue = el('strong', { text: String(sessionXp) });
+      const streakValue = el('strong', { text: String(streak) });
+      hud.append(
+        el('div', { class: 'lw-hud-item' }, [el('span', { text: timerLabel }), timerValue]),
+        el('div', { class: 'lw-hud-item' }, [el('span', { text: pointsLabel }), pointsValue]),
+        el('div', { class: 'lw-hud-item' }, [el('span', { text: streakLabel }), streakValue]),
+      );
+      body.append(hud);
+      let seconds = 60;
+      exerciseTimerId = window.setInterval(() => {
+        seconds = Math.max(0, seconds - 1);
+        timerValue.textContent = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+        if (seconds === 0 && exerciseTimerId) {
+          clearInterval(exerciseTimerId);
+          exerciseTimerId = null;
+          timerValue.classList.add('lw-time-up');
+        }
+      }, 1000);
+    }
 
     // every sentence lives in its own self-contained card:
     // number chip, media/prompt, input, check action, hint and feedback
@@ -574,6 +607,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
 
   // ---------- summary ----------
   async function renderSummary() {
+    if (exerciseTimerId) { clearInterval(exerciseTimerId); exerciseTimerId = null; }
     const attempted = results.filter(Boolean);
     const good = attempted.filter((r) => r.status === 'correct').length;
     const minor = attempted.filter((r) => r.status === 'minor').length;
