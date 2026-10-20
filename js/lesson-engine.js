@@ -264,6 +264,26 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       });
       actions.append(checkBtn, hintBtn, skipBtn);
       card.append(actions);
+      const footerControls = el('div', { class: 'lw-footer-controls' });
+      const restartBtn = el('button', {
+        class: 'btn btn-ghost btn-sm',
+        text: L === 'ar' ? 'أعد هذا التمرين' : 'Restart exercise',
+        onclick: () => { results[idx] = null; renderExercise(); },
+      });
+      const replayBtn = el('button', {
+        class: 'btn btn-ghost btn-sm',
+        text: L === 'ar' ? 'استمع مجدداً' : 'Listen again',
+        onclick: () => playAudio(ex.en),
+      });
+      const footerNext = el('button', {
+        class: 'btn btn-primary btn-sm',
+        text: L === 'ar' ? 'التمرين التالي' : 'Next exercise',
+        disabled: true,
+        onclick: onNext,
+      });
+      footerControls.append(restartBtn, replayBtn, footerNext);
+      card.append(footerControls);
+      state.footerNext = footerNext;
       setTimeout(() => input.focus(), 120);
       state.input = input;
     }
@@ -434,6 +454,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     }
 
     checked = true;
+    if (state.footerNext) state.footerNext.disabled = false;
     lastResult = result;
     results[idx] = { status: result.status, ex, typedValue: typedVal };
     if (result.status === 'incorrect' || result.status === 'skipped') {
@@ -492,6 +513,13 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     }
 
     state.feedbackBox.replaceChildren(fb);
+    const hudValues = body.querySelectorAll('.lw-hud-item strong');
+    if (hudValues.length >= 3) {
+      hudValues[1].textContent = String(sessionXp);
+      let liveStreak = 0;
+      for (let i = idx; i >= 0 && results[i]?.status === 'correct'; i--) liveStreak++;
+      hudValues[2].textContent = String(liveStreak);
+    }
 
     // sentence analysis word cards (listen & type / word order reveal the sentence)
     if (ex.type === 'listen-and-type' || ex.type === 'word-order') {
@@ -580,6 +608,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     const ex = exercises[idx];
     if (typeof confirm !== 'undefined' && !confirm(t(L, 'skipConfirm'))) return;
     checked = true;
+    if (state.footerNext) state.footerNext.disabled = false;
     results[idx] = { status: 'skipped', ex, typedValue: '' };
     firstAttemptMap.set(ex.id, false);
     const fb = el('div', { class: 'feedback bad' }, [
