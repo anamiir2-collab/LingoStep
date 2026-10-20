@@ -1243,3 +1243,14 @@ kbd {
 .wc-word-card .wc-pos { font-size: .78rem; color: var(--muted, #777); }
 .wc-word-card .wc-phonetic { font-size: .9rem; color: var(--accent, #8b6cf0); }
 .wc-word-card .wc-meaning { font-size: .95rem; font-weight: 600; }
+
+
+.lw-footer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+  justify-content: center;
+  margin-top: .85rem;
+}
+.lw-footer-controls .btn { flex: 1 1 auto; }
+.lw-footer-controls .btn:disabled { opacity: .45; cursor: not-allowed; }
