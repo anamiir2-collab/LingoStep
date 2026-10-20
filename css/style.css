@@ -1189,3 +1189,27 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .lw-character-wrong { animation: none; }
 }
+
+
+/* Listening & Writing session stats */
+.lw-session-hud {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .55rem;
+  margin: .75rem 0;
+}
+.lw-hud-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .2rem;
+  min-width: 0;
+  padding: .65rem .4rem;
+  border: 1px solid var(--border, rgba(130,130,150,.2));
+  border-radius: 14px;
+  background: var(--surface, rgba(130,130,150,.06));
+}
+.lw-hud-item span { font-size: .75rem; color: var(--muted, #777); }
+.lw-hud-item strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
+.lw-time-up { color: #e5484d !important; }
