@@ -20,6 +20,7 @@ import { attachKeyboard } from './keyboard.js';
 import { awardExercise, awardLessonComplete, markFirstAttemptFailed, getTotalXp } from './xp.js';
 import { messageForCorrect, messageForWrong, messageForXp, messageForLessonComplete } from './motivation.js';
 import { analyzeSentence, renderWordCards } from './word-cards.js';
+import { attachCharacterCheck } from './listening-writing-enhancements.js';
 
 const rank = { correct: 3, minor: 2, incorrect: 1, skipped: 0 };
 
@@ -221,6 +222,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       }
       const input = el('input', { type: 'text', dir: 'ltr', 'data-latin': 'true', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'aria-label': t(L, 'typeWhatYouHear'), placeholder: '…' });
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); checked ? onNext() : onCheck(); } });
+      attachCharacterCheck(input, { onCorrect: () => {}, onWrong: () => {} });
       inputRow.append(input);
       const kbMount = el('div', { class: 'kb-mount' });
       card.append(inputRow, kbMount);
