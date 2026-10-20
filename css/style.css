@@ -1254,3 +1254,85 @@ kbd {
 }
 .lw-footer-controls .btn { flex: 1 1 auto; }
 .lw-footer-controls .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+
+/* YouType-inspired letter-slot dictation surface */
+.lw-answer-row { width: 100%; }
+.lw-typing-surface {
+  position: relative;
+  width: 100%;
+  min-height: 150px;
+  padding: 28px 18px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 22px;
+  background: var(--surface, rgba(130,130,150,.035));
+  cursor: text;
+  overflow: hidden;
+  transition: background .18s ease;
+}
+.lw-letter-track {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: center;
+  column-gap: clamp(3px, 1.2vw, 10px);
+  row-gap: 25px;
+  pointer-events: none;
+}
+.lw-letter-slot {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 clamp(15px, 4.5vw, 29px);
+  min-width: 15px;
+  height: 43px;
+  border-bottom: 3px solid var(--muted, #92929b);
+  color: var(--text, #292832);
+  font-size: clamp(20px, 5.2vw, 30px);
+  font-weight: 600;
+  line-height: 1;
+  transition: color .15s ease, border-color .15s ease;
+}
+.lw-letter-slot.is-current { border-bottom-color: var(--accent, #8061e8); }
+.lw-letter-slot.is-filled.is-correct {
+  color: #229b68;
+  border-bottom-color: #229b68;
+}
+.lw-letter-slot.is-filled:not(.is-correct) {
+  color: #dc454c;
+  border-bottom-color: #dc454c;
+}
+.lw-letter-space {
+  flex: 0 0 clamp(10px, 3vw, 20px);
+  height: 43px;
+  border-bottom: 3px solid transparent;
+}
+.lw-typing-input {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  opacity: .015 !important;
+  color: transparent !important;
+  caret-color: transparent !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  cursor: text;
+}
+.lw-typing-surface:focus-within {
+  background: var(--surface-hover, rgba(128,97,232,.045));
+}
+.lw-typing-surface.is-complete .lw-letter-slot.is-current { border-bottom-color: #229b68; }
+.lw-typing-surface.lw-shake { animation: lw-character-shake .28s ease-in-out; }
+@media (max-width: 480px) {
+  .lw-typing-surface { min-height: 170px; padding: 24px 10px; }
+  .lw-letter-track { column-gap: 4px; row-gap: 22px; }
+  .lw-letter-slot { height: 38px; }
+}
