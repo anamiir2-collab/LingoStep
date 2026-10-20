@@ -1213,3 +1213,33 @@ kbd {
 .lw-hud-item span { font-size: .75rem; color: var(--muted, #777); }
 .lw-hud-item strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
 .lw-time-up { color: #e5484d !important; }
+
+
+/* Complete word-by-word learning cards */
+.wc-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: .65rem;
+}
+.wc-word-card {
+  min-width: 0;
+  padding: .8rem;
+  border: 1px solid var(--border, rgba(130,130,150,.2));
+  border-radius: 15px;
+  background: var(--surface, rgba(130,130,150,.045));
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+  text-align: center;
+}
+.wc-word-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  flex-wrap: wrap;
+}
+.wc-word-card .wc-word { font-size: 1.05rem; }
+.wc-word-card .wc-pos { font-size: .78rem; color: var(--muted, #777); }
+.wc-word-card .wc-phonetic { font-size: .9rem; color: var(--accent, #8b6cf0); }
+.wc-word-card .wc-meaning { font-size: .95rem; font-weight: 600; }
