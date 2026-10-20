@@ -253,10 +253,42 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       if (settings.showArabic && ex.ar) {
         card.append(el('div', { class: 'sentence-ar', dir: 'rtl', text: ex.ar }));
       }
-      const input = el('input', { type: 'text', dir: 'ltr', 'data-latin': 'true', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'aria-label': t(L, 'typeWhatYouHear'), placeholder: '…' });
+      const typingSurface = el('div', { class: 'lw-typing-surface', dir: 'ltr' });
+      const letterTrack = el('div', { class: 'lw-letter-track', 'aria-hidden': 'true' });
+      const input = el('input', { class: 'lw-typing-input', type: 'text', dir: 'ltr', 'data-latin': 'true', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'aria-label': t(L, 'typeWhatYouHear'), placeholder: '' });
+      const renderLetterTrack = () => {
+        letterTrack.replaceChildren();
+        const typed = input.value;
+        const chars = Array.from(ex.en);
+        let charIndex = 0;
+        for (const ch of chars) {
+          if (ch === ' ') {
+            letterTrack.append(el('span', { class: 'lw-letter-space', text: '\u00a0' }));
+            charIndex++;
+            continue;
+          }
+          const slot = el('span', { class: 'lw-letter-slot' });
+          const value = Array.from(typed)[charIndex] || '';
+          if (value) {
+            slot.textContent = value;
+            slot.classList.add('is-filled');
+            if (value.toLocaleLowerCase() === ch.toLocaleLowerCase()) slot.classList.add('is-correct');
+          } else if (charIndex === Array.from(typed).length) {
+            slot.classList.add('is-current');
+          }
+          letterTrack.append(slot);
+          charIndex++;
+        }
+        typingSurface.classList.toggle('is-complete', typed.length >= ex.en.length);
+      };
+      typingSurface.append(letterTrack, input);
+      inputRow.classList.add('lw-answer-row');
+      inputRow.append(typingSurface);
+      input.addEventListener('input', renderLetterTrack);
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); checked ? onNext() : onCheck(); } });
-      attachCharacterCheck(input, ex.en, { onCorrect: () => {}, onWrong: () => {} });
-      inputRow.append(input);
+      attachCharacterCheck(input, ex.en, { onCorrect: () => renderLetterTrack(), onWrong: () => { renderLetterTrack(); typingSurface.classList.remove('lw-shake'); void typingSurface.offsetWidth; typingSurface.classList.add('lw-shake'); } });
+      typingSurface.addEventListener('click', () => input.focus());
+      renderLetterTrack();
       const kbMount = el('div', { class: 'kb-mount' });
       card.append(inputRow, kbMount);
       keyboardHandle = attachKeyboard(input, kbMount, settings.onScreenKeyboard, {
