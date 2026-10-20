@@ -87,7 +87,7 @@ export function formatDuration(ms) {
 export function toast(msg, ms = 2600) {
   if (typeof document === 'undefined') return;
   document.querySelectorAll('.toast').forEach((t) => t.remove());
-  const box = el('div', { class: 'toast', role: 'status', text: msg });
+  const box = el('div', { class: 'toast', role: 'status', dir: 'auto', text: msg });
   document.body.appendChild(box);
   setTimeout(() => box.remove(), ms);
 }

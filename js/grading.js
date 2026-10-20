@@ -142,6 +142,96 @@ export function isAcceptable(userInput, acceptedAnswers, options = {}) {
   return r.status === 'correct' || r.status === 'minor';
 }
 
+/* ---------- word-level diff for rich feedback ---------- */
+
+/** Crude stem for pairing only (never used to forgive answers). */
+function pairStem(s) {
+  return s.replace(/(ies)$/, 'y').replace(/(es|s)$/, '').replace(/(ing|ed)$/, '');
+}
+
+function pairScore(typed, expected) {
+  if (typed === expected) return 3;
+  if (pairStem(typed) === pairStem(expected) && typed.length > 1 && expected.length > 1) return 2;
+  if (typed.length >= 3 && expected.length >= 3
+    && (typed.startsWith(expected.slice(0, 3)) || expected.startsWith(typed.slice(0, 3)))) return 1;
+  return 0;
+}
+
+/**
+ * Word-level alignment between what the user typed and one expected
+ * answer. Used ONLY for feedback visualization — the accept/reject
+ * decision still comes from checkAnswer().
+ *
+ * Returns:
+ *   typed:   [{ text, type: 'match' | 'wrong' | 'extra' }]   (user words, in order)
+ *   missing: [{ text }]   expected words with no counterpart
+ *   expectedTokens: [{ text, type: 'match' | 'wrong' | 'missing' }] (expected order)
+ *   correctCount / expectedCount
+ */
+export function wordDiff(userInput, expected) {
+  const u = words(userInput);
+  const e = words(expected);
+  const n = u.length, m = e.length;
+
+  // LCS table over exact matches
+  const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = u[i] === e[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+
+  const typedMatch = new Array(n).fill(false);
+  const expectedMatch = new Array(m).fill(false);
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (u[i] === e[j]) { typedMatch[i] = true; expectedMatch[j] = true; i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
+    else j++;
+  }
+
+  // greedy pairing of unmatched user words with unmatched expected words
+  const unmatchedU = [];
+  for (let a = 0; a < n; a++) if (!typedMatch[a]) unmatchedU.push(a);
+  const unmatchedE = [];
+  for (let b = 0; b < m; b++) if (!expectedMatch[b]) unmatchedE.push(b);
+
+  const pairOf = new Map(); // userIndex -> expectedIndex
+  const usedE = new Set();
+  for (const a of unmatchedU) {
+    let best = -1, bestScore = 0;
+    for (const b of unmatchedE) {
+      if (usedE.has(b)) continue;
+      const s = pairScore(u[a], e[b]);
+      if (s > bestScore) { bestScore = s; best = b; }
+    }
+    if (best >= 0) { pairOf.set(a, best); usedE.add(best); }
+  }
+
+  const typed = u.map((text, a) => ({
+    text,
+    type: typedMatch[a] ? 'match' : (pairOf.has(a) ? 'wrong' : 'extra'),
+    expected: pairOf.has(a) ? e[pairOf.get(a)] : undefined,
+  }));
+
+  const missing = [];
+  const expectedTokens = e.map((text, b) => {
+    if (expectedMatch[b]) return { text, type: 'match' };
+    const paired = unmatchedU.find((a) => pairOf.get(a) === b);
+    if (paired !== undefined) return { text, type: 'wrong' };
+    missing.push({ text });
+    return { text, type: 'missing' };
+  });
+
+  return {
+    typed,
+    missing,
+    expectedTokens,
+    correctCount: typedMatch.filter(Boolean).length,
+    expectedCount: m,
+  };
+}
+
 /* ---------- sentence helpers used by other modules ---------- */
 
 /** Tokenize into words (letters/digits/apostrophes/hyphens kept). */

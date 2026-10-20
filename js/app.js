@@ -4,7 +4,7 @@
    statistics, settings. Wires router, settings, i18n, SW updates.
    ============================================================ */
 
-import { el, $, pct, formatDuration } from './utils.js';
+import { el, $, pct, formatDuration, toast } from './utils.js';
 import { icon, iconLabel } from './icons.js';
 import { t } from './i18n.js';
 import { getSettings, saveSettings, applyDocumentSettings } from './settings.js';
@@ -14,6 +14,9 @@ import { renderLessonPlayer, renderErrorState } from './lesson-engine.js';
 import { getOverview, getToday, getDailyHistory, getAllLessonStates, exportBackup, importBackup, clearAllProgress } from './progress.js';
 import { dueCount, dueItems, availableTags, totalCount as reviewTotalCount } from './review.js';
 import { isSupported as speechSupported, loadVoices, englishVoices, speak } from './speech.js';
+import { getTotalXp } from './xp.js';
+import { renderVocabularyView } from './vocabulary.js';
+import { messageForFirstVisit } from './motivation.js';
 
 const SECTIONS_META = [
   { id: 'basics', icon: 'basics', en: 'Basics & Sentence Structure', ar: 'الأساسيات وبناء الجملة', descEn: 'SVO order, pronouns, articles, plurals, adjectives, prepositions', descAr: 'ترتيب الجملة، الضمائر، أدوات التعريف، الجمع، الصفات، حروف الجر' },
@@ -79,6 +82,7 @@ function renderShell() {
       el('nav', { class: 'main-nav', 'aria-label': 'Main' }, [
         navLink('navHome', '#/', 'home'),
         navLink('navSections', '#/sections', 'sections'),
+        navLink('navVocabulary', '#/vocabulary', 'vocabulary'),
         navLink('navProgress', '#/progress', 'progress'),
         navLink('navReview', '#/review', 'review'),
         navLink('navSettings', '#/settings', 'settings'),
@@ -95,10 +99,11 @@ function renderShell() {
     el('span', { text: t(L, 'footerNote') }),
   ]);
 
-  // Mobile floating navigation: Home / Sections / Progress.
+  // Mobile floating navigation: Home / Sections / Vocabulary / Progress.
   const mobileNav = el('nav', { class: 'mobile-bottom-nav', 'aria-label': L === 'ar' ? 'التنقل الرئيسي' : 'Primary navigation' }, [
     mobileNavLink('navHome', '#/', 'home', 'home'),
     mobileNavLink('navSections', '#/sections', 'sections', 'grid'),
+    mobileNavLink('navVocabulary', '#/vocabulary', 'vocabulary', 'book'),
     mobileNavLink('navProgress', '#/progress', 'progress', 'chart'),
   ]);
 
@@ -124,14 +129,14 @@ function mobileNavLink(labelKey, href, routeName, iconName) {
 
 function updateNavState(routeName) {
   // Desktop header links highlight per exact destination group.
-  const desktopMap = { home: 'home', sections: 'sections', section: 'sections', lesson: 'sections', progress: 'progress', stats: 'progress', review: 'review', settings: 'settings' };
+  const desktopMap = { home: 'home', sections: 'sections', section: 'sections', lesson: 'sections', vocabulary: 'vocabulary', progress: 'progress', stats: 'progress', review: 'review', settings: 'settings' };
   document.querySelectorAll('.nav-link').forEach((a) => {
     if (a.dataset.route === desktopMap[routeName]) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
 
-  // Mobile bar has 3 destinations; review lives under Home, settings under the avatar.
-  const mobileMap = { home: 'home', review: 'home', sections: 'sections', section: 'sections', lesson: 'sections', progress: 'progress', stats: 'progress' };
+  // Mobile bar destinations; review lives under Home, settings under the avatar.
+  const mobileMap = { home: 'home', review: 'home', sections: 'sections', section: 'sections', lesson: 'sections', vocabulary: 'vocabulary', progress: 'progress', stats: 'progress' };
   const target = mobileMap[routeName] || '';
   [...document.querySelectorAll('.mobile-nav-link')].forEach((a) => {
     const active = a.dataset.route === target;
@@ -181,6 +186,7 @@ async function handleRoute(route) {
     if (route.name === 'sections') return await viewSections(view);
     if (route.name === 'section') return await viewSection(view, route.params[0]);
     if (route.name === 'lesson') return await viewLesson(view, route.params[0]);
+    if (route.name === 'vocabulary') return await viewVocabulary(view);
     if (route.name === 'review') return await viewReview(view);
     if (route.name === 'progress' || route.name === 'stats') return await viewProgress(view);
     if (route.name === 'settings') return await viewSettings(view);
@@ -213,8 +219,8 @@ async function viewDashboard(view) {
   loading(view);
   docTitle('navHome');
   const L = currentLang;
-  const [overview, today, states, due] = await Promise.all([
-    getOverview(), getToday(), getAllLessonStates(), dueCount(),
+  const [overview, today, states, due, totalXp] = await Promise.all([
+    getOverview(), getToday(), getAllLessonStates(), dueCount(), getTotalXp(),
   ]);
   const settings = getSettings();
 
@@ -259,7 +265,16 @@ async function viewDashboard(view) {
     statCard(formatNumber(overview.totalAnswers), t(L, 'practicedSentences'), 'pen'),
     statCard(`${overview.accuracy}%`, t(L, 'accuracy'), 'target'),
     statCard(formatNumber(overview.streak), t(L, 'streakDays'), 'flame'),
+    statCard(formatNumber(totalXp), t(L, 'xpTotal'), 'sparkle'),
   ]);
+
+  // ---- first-visit encouragement (Arabic messages dataset, {name}-aware) ----
+  const firstVisitCard = (overview.totalAnswers === 0 && overview.completedLessons === 0)
+    ? el('div', { class: 'card motivation-banner' }, [
+        el('div', { class: 'motivation-line', dir: 'rtl', text: messageForFirstVisit(settings.userName) }),
+        el('a', { class: 'btn btn-primary mt', href: '#/sections' }, [iconLabel('play', t(L, 'startNow'))]),
+      ])
+    : null;
 
   // ---- daily goal card (updates from the same single source of truth) ----
   const goalCard = el('div', { class: 'card' }, [
@@ -285,7 +300,7 @@ async function viewDashboard(view) {
     ]),
   ]);
 
-  view.replaceChildren(hero, statGrid, goalCard, reviewCard);
+  view.replaceChildren(hero, statGrid, ...(firstVisitCard ? [firstVisitCard] : []), goalCard, reviewCard);
 }
 
 function statCard(value, label, iconName) {
@@ -393,6 +408,11 @@ async function viewLesson(view, lessonId) {
   loading(view);
   const settings = getSettings();
   await renderLessonPlayer(view, lessonId, {});
+}
+
+async function viewVocabulary(view) {
+  docTitle('navVocabulary');
+  await renderVocabularyView(view);
 }
 
 /* ============================================================
@@ -625,6 +645,7 @@ async function viewSettings(view) {
 
   const arabicToggle = toggle(s.showArabic, (on) => saveSettings({ showArabic: on }));
   const strictToggle = toggle(s.strictGrading, (on) => saveSettings({ strictGrading: on }));
+  const keyboardToggle = toggle(s.onScreenKeyboard, (on) => saveSettings({ onScreenKeyboard: on }));
 
   const rateSel = el('select', { 'aria-label': t(L, 'speechRate') }, [
     el('option', { value: '0.65', text: '0.65×', selected: s.rate <= 0.65 ? '' : null }),
@@ -709,6 +730,7 @@ async function viewSettings(view) {
       settingRow(t(L, 'dailyGoalSetting'), null, goalInput),
       settingRow(t(L, 'showArabic'), null, arabicToggle),
       settingRow(t(L, 'strictGrading'), null, strictToggle),
+      settingRow(t(L, 'onScreenKeyboard'), null, keyboardToggle),
     ]),
     el('div', { class: 'card' }, [
       el('h3', { class: 'card-title' }, [iconLabel('audio', t(L, 'speechSection'))]),

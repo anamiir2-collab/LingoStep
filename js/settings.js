@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS = {
   dailyGoal: 20,         // exercises per day
   showArabic: true,      // show Arabic translation during practice
   strictGrading: true,   // contractions/punctuation count as differences
+  onScreenKeyboard: true, // show the built-in Latin keyboard under typing inputs
   userName: '',          // optional display name used in the greeting
 };
 
@@ -54,6 +55,9 @@ export function saveSettings(patch = {}) {
   next.rate = Math.min(1.3, Math.max(0.5, Number(next.rate) || 1));
   next.dailyGoal = Math.min(200, Math.max(5, parseInt(next.dailyGoal, 10) || 20));
   next.userName = String(next.userName ?? '').trim().slice(0, 24);
+  next.onScreenKeyboard = next.onScreenKeyboard !== false; // boolean, default true
+  next.showArabic = next.showArabic !== false;
+  next.strictGrading = next.strictGrading !== false;
   cache = next;
   safeSet(JSON.stringify(next));
   return { ...next };
@@ -68,7 +72,7 @@ export function applyDocumentSettings(settings = getSettings()) {
   html.setAttribute('data-theme', settings.theme);
 
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', settings.theme === 'dark' ? '#131b17' : '#a8d5a2');
+  if (meta) meta.setAttribute('content', settings.theme === 'dark' ? '#14121c' : '#8b6cf0');
 }
 
 export function getLang() {
