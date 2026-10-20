@@ -1167,3 +1167,25 @@ kbd {
   .osk-key, .osk-key:active { transition: none; transform: none; }
 }
 
+
+
+/* Listening & Writing — instant character feedback */
+.lw-character-correct {
+  border-color: #22a06b !important;
+  box-shadow: 0 0 0 3px rgba(34,160,107,.12) !important;
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.lw-character-wrong {
+  border-color: #e5484d !important;
+  background-color: rgba(229,72,77,.08) !important;
+  animation: lw-character-shake .28s ease-in-out;
+}
+@keyframes lw-character-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  50% { transform: translateX(4px); }
+  75% { transform: translateX(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lw-character-wrong { animation: none; }
+}
