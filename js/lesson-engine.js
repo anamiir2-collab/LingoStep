@@ -222,7 +222,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       }
       const input = el('input', { type: 'text', dir: 'ltr', 'data-latin': 'true', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'aria-label': t(L, 'typeWhatYouHear'), placeholder: '…' });
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); checked ? onNext() : onCheck(); } });
-      attachCharacterCheck(input, { onCorrect: () => {}, onWrong: () => {} });
+      attachCharacterCheck(input, ex.en, { onCorrect: () => {}, onWrong: () => {} });
       inputRow.append(input);
       const kbMount = el('div', { class: 'kb-mount' });
       card.append(inputRow, kbMount);
