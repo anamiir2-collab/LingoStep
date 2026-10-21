@@ -1,0 +1,34 @@
+LingoStep — YouType-style dictation upgrade
+============================================
+Commit: "Upgrade dictation to word-grouped letter slots with instant validation"
+
+MODIFIED FILES (13):
+  js/letter-track.js                      (NEW - letter slot surface module)
+  tests/letter-track-tests.js             (NEW - unit tests)
+  js/listening-writing-enhancements.js    (prefix rejection + completion + shared AudioContext + mute)
+  js/lesson-engine.js                     (auto-check on completion + sound-effects toggle button)
+  css/style.css                           (word-grouped slots, gaps, success animations, iOS zoom fix)
+  js/word-cards.js                        (card order: word, meaning, IPA, POS chip)
+  js/app.js                               (soundEffects setting row + onChangeRerun routing fix)
+  js/settings.js                          (soundEffects preference)
+  js/i18n.js                              (EN/AR strings for new UI)
+  js/icon-config.js                       (volumeX icon registration)
+  assets/icons/icons.svg                  (volumeX symbol)
+  sw.js                                   (cache bump v1.3.0 + precache letter-track.js)
+  tests/run-all.js                        (register letter-track suite)
+
+TESTS: node tests/run-all.js  ->  8/8 suites passed
+BROWSER: correct/wrong typing, backspace, full-sentence paste, auto-check,
+         on-screen keyboard, mute toggle, AR/RTL, mobile + desktop, 75-char
+         sentence wrapping -> all verified in Chromium, zero console errors.
+
+HOW TO PUBLISH TO GITHUB PAGES:
+  Option A (full replace): upload the contents of this folder to your repo
+    main branch (replacing existing files), commit, push.
+  Option B (your clone): copy the 13 files above over your working copy,
+    then: git add -A && git commit -m "Upgrade dictation to word-grouped
+    letter slots" && git push origin main
+  Option C (patch file): from the sibling file
+    0001-Upgrade-dictation-to-word-grouped-letter-slots-with-.patch
+    run:  git am 0001-*.patch   (inside your LingoStep clone)
+GitHub Pages will redeploy automatically after the push (~1 minute).

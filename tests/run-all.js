@@ -8,7 +8,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const suites = ['./grading-tests.js', './storage-tests.js', './navigation-tests.js', './lesson-tests.js', './xp-tests.js', './motivation-tests.js', './wordcards-tests.js'];
+const suites = ['./grading-tests.js', './storage-tests.js', './navigation-tests.js', './lesson-tests.js', './xp-tests.js', './motivation-tests.js', './wordcards-tests.js', './letter-track-tests.js'];
 
 const results = [];
 let failed = false;

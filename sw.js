@@ -11,7 +11,7 @@
    Version bump replaces old caches on activate.
    ============================================================ */
 
-const VERSION = 'v1.2.2';
+const VERSION = 'v1.3.0';
 const SHELL_CACHE = `lingostep-shell-${VERSION}`;
 const LESSON_CACHE = `lingostep-lessons-${VERSION}`;
 const KNOWN_CACHES = [SHELL_CACHE, LESSON_CACHE];
@@ -49,6 +49,7 @@ const SHELL_ASSETS = [
   './js/lesson-loader.js',
   './js/lesson-engine.js',
   './js/listening-writing-enhancements.js',
+  './js/letter-track.js',
   './js/keyboard.js',
   './js/xp.js',
   './js/motivation.js',
