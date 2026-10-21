@@ -1,31 +1,102 @@
-/* LingoStep — character-by-character dictation feedback.
- * Keeps only the correct prefix, so learners must correct each letter
- * before progressing. Uses native Web Audio only after user interaction.
+/* ============================================================
+   LingoStep — listening-writing-enhancements.js
+   Character-by-character dictation feedback for Listening & Writing.
+
+   Behaviour (spec: instant per-letter validation):
+   - Keeps only the correct prefix: a wrong letter is rejected
+     immediately, correct letters already typed are never lost,
+     and the learner stays at the position they must complete.
+   - Emits short Web-Audio tones: soft tick for a correct letter,
+     low buzz for a rejected one, and a small ascending arpeggio
+     when the whole sentence is completed.
+   - Sound effects respect the user's `soundEffects` setting and
+     are muted when it is off. Tones start only after real user
+     interaction (browser autoplay policies).
+   - One shared AudioContext is reused for every tone (creating a
+     context per keystroke hits the browser's context limit and
+     silently kills sound in long sessions).
+   - Never throws: sound and animation are optional, typing must
+     keep working even when Web Audio is unavailable.
+   ============================================================ */
+
+import { getSettings } from './settings.js';
+
+/* ---------- shared audio ---------- */
+
+let sharedCtx = null;
+
+function audioCtx() {
+  try {
+    if (typeof window === 'undefined') return null;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    if (!sharedCtx || sharedCtx.state === 'closed') sharedCtx = new Ctx();
+    if (sharedCtx.state === 'suspended') sharedCtx.resume().catch(() => {});
+    return sharedCtx;
+  } catch {
+    return null;
+  }
+}
+
+function tone(freq, { dur = 0.09, delay = 0, gain = 0.06, type = 'sine' } = {}) {
+  try {
+    const ctx = audioCtx();
+    if (!ctx) return;
+    const t0 = ctx.currentTime + delay;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.type = type;
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(gain, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+    osc.onended = () => {
+      try { osc.disconnect(); g.disconnect(); } catch { /* ignore */ }
+    };
+  } catch { /* sound is optional; never block typing */ }
+}
+
+function effectsEnabled() {
+  try {
+    return getSettings().soundEffects !== false;
+  } catch {
+    return true;
+  }
+}
+
+function soundCorrect() {
+  if (!effectsEnabled()) return;
+  tone(660, { dur: 0.07, gain: 0.045 });
+}
+
+function soundWrong() {
+  if (!effectsEnabled()) return;
+  tone(180, { dur: 0.13, gain: 0.05, type: 'sawtooth' });
+}
+
+function soundComplete() {
+  if (!effectsEnabled()) return;
+  tone(523.25, { dur: 0.09, gain: 0.055, delay: 0 });
+  tone(659.25, { dur: 0.09, gain: 0.055, delay: 0.09 });
+  tone(783.99, { dur: 0.16, gain: 0.06, delay: 0.18 });
+}
+
+/* ---------- character check ---------- */
+
+/**
+ * Attach strict prefix validation to a text input.
+ * opts: { onCorrect(len), onWrong(goodIndex, wrongChar), onComplete() }
+ * Returns { destroy }.
  */
 export function attachCharacterCheck(input, target, opts = {}) {
   if (!input || typeof target !== 'string') return { destroy() {} };
   const expected = target;
   let wrongTimer = 0;
-
-  function tone(correct) {
-    try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.value = correct ? 740 : 190;
-      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.07, ctx.currentTime + 0.012);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + (correct ? 0.09 : 0.14));
-      osc.start();
-      osc.stop(ctx.currentTime + (correct ? 0.1 : 0.15));
-      osc.onended = () => ctx.close();
-    } catch { /* sound is optional; never block typing */ }
-  }
+  let completed = false;
 
   function onInput() {
     const value = input.value;
@@ -35,31 +106,41 @@ export function attachCharacterCheck(input, target, opts = {}) {
       good += 1;
     }
     if (good < value.length) {
+      // reject everything after the correct prefix, keep the prefix
       input.value = value.slice(0, good);
-      try { input.setSelectionRange(good, good); } catch {}
+      try { input.setSelectionRange(good, good); } catch { /* no caret on some types */ }
       input.classList.remove('lw-character-wrong');
       // Restart the animation even when two errors happen quickly.
       void input.offsetWidth;
       input.classList.add('lw-character-wrong');
       window.clearTimeout(wrongTimer);
       wrongTimer = window.setTimeout(() => input.classList.remove('lw-character-wrong'), 420);
-      tone(false);
+      soundWrong();
       if (typeof opts.onWrong === 'function') opts.onWrong(good, value[good]);
       return;
     }
     if (value.length > 0) {
       input.classList.add('lw-character-correct');
-      tone(true);
+      soundCorrect();
       if (typeof opts.onCorrect === 'function') opts.onCorrect(value.length);
+      if (!completed && value.length >= expected.length) {
+        completed = true;
+        soundComplete();
+        if (typeof opts.onComplete === 'function') opts.onComplete();
+      }
     } else {
       input.classList.remove('lw-character-correct');
     }
   }
 
+  function onCompositionEnd() { onInput(); }
+
   input.addEventListener('input', onInput);
+  input.addEventListener('compositionend', onCompositionEnd);
   return {
     destroy() {
       input.removeEventListener('input', onInput);
+      input.removeEventListener('compositionend', onCompositionEnd);
       window.clearTimeout(wrongTimer);
     },
   };

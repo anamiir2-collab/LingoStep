@@ -366,24 +366,27 @@ export function renderWordCards(tokens, opts = {}) {
     }
     card.append(head);
 
-    const pos = document.createElement('div');
-    pos.className = 'wc-pos';
-    pos.textContent = token.posAr
-      ? `${labels.partOfSpeech || 'Part of speech'}: ${token.posAr} (${token.posEn})`
-      : `${labels.partOfSpeech || 'Part of speech'}: ${labels.unknown || 'not determined'}`;
-    card.append(pos);
+    // Arabic meaning directly below the word
+    const meaning = document.createElement('div');
+    meaning.className = 'wc-meaning';
+    meaning.dir = 'rtl';
+    meaning.textContent = token.meaningAr || labels.noAnalysis || 'لا توجد ترجمة متاحة';
+    card.append(meaning);
 
+    // verified IPA only — never invented (see HONESTY RULES above)
     const phonetic = document.createElement('div');
     phonetic.className = 'wc-phonetic';
     phonetic.dir = 'ltr';
     phonetic.textContent = token.phonetic || '—';
     card.append(phonetic);
 
-    const meaning = document.createElement('div');
-    meaning.className = 'wc-meaning';
-    meaning.dir = 'rtl';
-    meaning.textContent = token.meaningAr || labels.noAnalysis || 'لا توجد ترجمة متاحة';
-    card.append(meaning);
+    // part of speech as a small chip; honestly "not determined" when unknown
+    const pos = document.createElement('div');
+    pos.className = 'wc-pos';
+    pos.textContent = token.posAr
+      ? `${token.posAr} · ${token.posEn}`
+      : `${labels.partOfSpeech || 'Part of speech'}: ${labels.unknown || 'not determined'}`;
+    card.append(pos);
     grid.append(card);
   }
 

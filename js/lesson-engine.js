@@ -21,6 +21,8 @@ import { awardExercise, awardLessonComplete, markFirstAttemptFailed, getTotalXp 
 import { messageForCorrect, messageForWrong, messageForXp, messageForLessonComplete } from './motivation.js';
 import { analyzeSentence, renderWordCards } from './word-cards.js';
 import { attachCharacterCheck } from './listening-writing-enhancements.js';
+import { buildLetterSurface } from './letter-track.js';
+import { saveSettings } from './settings.js';
 
 const rank = { correct: 3, minor: 2, incorrect: 1, skipped: 0 };
 
@@ -241,6 +243,23 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       const listenBtn = el('button', { class: 'audio-main', 'aria-label': t(L, 'play'), title: t(L, 'play'), onclick: () => playAudio(ex.en) }, [icon('audio')]);
       const slowBtn = el('button', { class: 'audio-slow', 'aria-label': t(L, 'playSlow'), title: t(L, 'playSlow'), onclick: () => playAudio(ex.en, 0.65) }, [icon('turtle')]);
       audioRow.append(listenBtn, slowBtn);
+      // mute toggle for the typing sound effects (correct / wrong tones)
+      const fxLabel = (on) => t(L, on ? 'soundFxOn' : 'soundFxOff');
+      const fxOn = getSettings().soundEffects !== false;
+      const fxBtn = el('button', {
+        class: 'audio-slow lw-fx-toggle',
+        'aria-label': fxLabel(fxOn),
+        title: fxLabel(fxOn),
+        onclick: () => {
+          const next = getSettings().soundEffects === false; // muted → enable
+          saveSettings({ soundEffects: next });
+          fxBtn.replaceChildren(icon(next ? 'audio' : 'volumeX'));
+          fxBtn.setAttribute('aria-label', fxLabel(next));
+          fxBtn.title = fxLabel(next);
+          toast(fxLabel(next), 1400);
+        },
+      }, [icon(fxOn ? 'audio' : 'volumeX')]);
+      audioRow.append(fxBtn);
       if (!speechSupported()) {
         audioRow.append(el('p', { class: 'muted small', text: t(L, 'speechUnavailable') }));
         // If speech is unavailable, show the sentence so the exercise stays usable.
@@ -253,47 +272,49 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       if (settings.showArabic && ex.ar) {
         card.append(el('div', { class: 'sentence-ar', dir: 'rtl', text: ex.ar }));
       }
-      const typingSurface = el('div', { class: 'lw-typing-surface', dir: 'ltr' });
-      const letterTrack = el('div', { class: 'lw-letter-track', 'aria-hidden': 'true' });
-      const input = el('input', { class: 'lw-typing-input', type: 'text', dir: 'ltr', 'data-latin': 'true', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'aria-label': t(L, 'typeWhatYouHear'), placeholder: '' });
-      const renderLetterTrack = () => {
-        letterTrack.replaceChildren();
-        const typed = input.value;
-        const chars = Array.from(ex.en);
-        let charIndex = 0;
-        for (const ch of chars) {
-          if (ch === ' ') {
-            letterTrack.append(el('span', { class: 'lw-letter-space', text: '\u00a0' }));
-            charIndex++;
-            continue;
-          }
-          const slot = el('span', { class: 'lw-letter-slot' });
-          const value = Array.from(typed)[charIndex] || '';
-          if (value) {
-            slot.textContent = value;
-            slot.classList.add('is-filled');
-            if (value.toLocaleLowerCase() === ch.toLocaleLowerCase()) slot.classList.add('is-correct');
-          } else if (charIndex === Array.from(typed).length) {
-            slot.classList.add('is-current');
-          }
-          letterTrack.append(slot);
-          charIndex++;
-        }
-        typingSurface.classList.toggle('is-complete', typed.length >= ex.en.length);
-      };
-      typingSurface.append(letterTrack, input);
+      // YouType-style letter slots backed by ONE real input element:
+      // phone keyboards, backspace, space and paste all edit that input
+      // and the slots mirror it (see js/letter-track.js).
+      const surfaceApi = buildLetterSurface(ex.en, { ariaLabel: t(L, 'typeWhatYouHear') });
+      const typingSurface = surfaceApi.surface;
+      const input = surfaceApi.input;
+      const renderLetterTrack = () => surfaceApi.render(input.value);
       inputRow.classList.add('lw-answer-row');
       inputRow.append(typingSurface);
       input.addEventListener('input', renderLetterTrack);
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); checked ? onNext() : onCheck(); } });
-      attachCharacterCheck(input, ex.en, { onCorrect: () => renderLetterTrack(), onWrong: () => { renderLetterTrack(); typingSurface.classList.remove('lw-shake'); void typingSurface.offsetWidth; typingSurface.classList.add('lw-shake'); } });
-      typingSurface.addEventListener('click', () => input.focus());
+      const charCheck = attachCharacterCheck(input, ex.en, {
+        onCorrect: renderLetterTrack,
+        onWrong: () => {
+          renderLetterTrack();
+          typingSurface.classList.remove('lw-shake');
+          void typingSurface.offsetWidth; // restart the shake animation
+          typingSurface.classList.add('lw-shake');
+        },
+        onComplete: () => {
+          // sentence fully typed → success state, then hand over to the
+          // normal check pipeline (grading, XP, feedback, word cards)
+          renderLetterTrack();
+          typingSurface.classList.add('is-complete');
+          const at = idx;
+          window.setTimeout(() => {
+            if (!checked && idx === at && state.input === input) onCheck();
+          }, 620);
+        },
+      });
       renderLetterTrack();
       const kbMount = el('div', { class: 'kb-mount' });
       card.append(inputRow, kbMount);
-      keyboardHandle = attachKeyboard(input, kbMount, settings.onScreenKeyboard, {
+      const kbHandle = attachKeyboard(input, kbMount, settings.onScreenKeyboard, {
         clear: t(L, 'resetWordOrder'), enter: t(L, 'checkAnswer'),
       });
+      keyboardHandle = {
+        destroy() {
+          try { kbHandle.destroy(); } catch { /* ignore */ }
+          try { charCheck.destroy(); } catch { /* ignore */ }
+          try { surfaceApi.destroy(); } catch { /* ignore */ }
+        },
+      };
       actions.append(checkBtn, hintBtn, skipBtn);
       card.append(actions);
       const footerControls = el('div', { class: 'lw-footer-controls' });

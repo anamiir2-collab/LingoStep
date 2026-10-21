@@ -166,9 +166,11 @@ function cycleTheme() {
 }
 
 function onChangeRerun() {
-  // re-render current route with new language
-  const parsed = { name: (location.hash.replace(/^#\//, '').split('/')[0]) || 'home', params: location.hash.split('/').slice(1) };
-  handleRoute({ name: parsed.name === '' ? 'home' : parsed.name, params: parsed.params.map((p) => decodeURIComponent(p.split('?')[0])) });
+  // re-render current route with new language.
+  // Must mirror router.parseHash: "#/lesson/lesson-109" → name 'lesson',
+  // params ['lesson-109'] (the route name itself is NOT a param).
+  const parts = location.hash.replace(/^#\//, '').split('?')[0].split('/').filter(Boolean);
+  handleRoute({ name: parts[0] || 'home', params: parts.slice(1).map(decodeURIComponent) });
 }
 
 /* ============================================================
@@ -646,6 +648,7 @@ async function viewSettings(view) {
   const arabicToggle = toggle(s.showArabic, (on) => saveSettings({ showArabic: on }));
   const strictToggle = toggle(s.strictGrading, (on) => saveSettings({ strictGrading: on }));
   const keyboardToggle = toggle(s.onScreenKeyboard, (on) => saveSettings({ onScreenKeyboard: on }));
+  const soundFxToggle = toggle(s.soundEffects !== false, (on) => saveSettings({ soundEffects: on }));
 
   const rateSel = el('select', { 'aria-label': t(L, 'speechRate') }, [
     el('option', { value: '0.65', text: '0.65×', selected: s.rate <= 0.65 ? '' : null }),
@@ -731,6 +734,7 @@ async function viewSettings(view) {
       settingRow(t(L, 'showArabic'), null, arabicToggle),
       settingRow(t(L, 'strictGrading'), null, strictToggle),
       settingRow(t(L, 'onScreenKeyboard'), null, keyboardToggle),
+      settingRow(t(L, 'soundEffects'), null, soundFxToggle),
     ]),
     el('div', { class: 'card' }, [
       el('h3', { class: 'card-title' }, [iconLabel('audio', t(L, 'speechSection'))]),

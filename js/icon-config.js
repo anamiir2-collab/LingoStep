@@ -23,6 +23,7 @@ export const ICONS = {
   chart: { type: 'svg', src: './assets/icons/icons.svg#chart' },
   flame: { type: 'svg', src: './assets/icons/icons.svg#flame' },
   audio: { type: 'svg', src: './assets/icons/icons.svg#audio' },
+  volumeX: { type: 'svg', src: './assets/icons/icons.svg#volumeX' },
   download: { type: 'svg', src: './assets/icons/icons.svg#download' },
   upload: { type: 'svg', src: './assets/icons/icons.svg#upload' },
   trash: { type: 'svg', src: './assets/icons/icons.svg#trash' },

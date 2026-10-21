@@ -1240,9 +1240,17 @@ kbd {
   flex-wrap: wrap;
 }
 .wc-word-card .wc-word { font-size: 1.05rem; }
-.wc-word-card .wc-pos { font-size: .78rem; color: var(--muted, #777); }
-.wc-word-card .wc-phonetic { font-size: .9rem; color: var(--accent, #8b6cf0); }
 .wc-word-card .wc-meaning { font-size: .95rem; font-weight: 600; }
+.wc-word-card .wc-phonetic { font-size: .9rem; color: var(--accent, #8b6cf0); }
+.wc-word-card .wc-pos {
+  align-self: center;
+  padding: .18rem .6rem;
+  border: 1px solid var(--border, rgba(130,130,150,.25));
+  border-radius: 999px;
+  font-size: .74rem;
+  color: var(--muted, #777);
+  background: var(--surface, rgba(130,130,150,.05));
+}
 
 
 .lw-footer-controls {
@@ -1256,7 +1264,9 @@ kbd {
 .lw-footer-controls .btn:disabled { opacity: .45; cursor: not-allowed; }
 
 
-/* YouType-inspired letter-slot dictation surface */
+/* YouType-inspired letter-slot dictation surface.
+   Words render as unbreakable groups (.lw-word) so long sentences
+   wrap word-by-word; spaces own a visible gap slot (.lw-word-gap). */
 .lw-answer-row { width: 100%; }
 .lw-typing-surface {
   position: relative;
@@ -1271,7 +1281,7 @@ kbd {
   background: var(--surface, rgba(130,130,150,.035));
   cursor: text;
   overflow: hidden;
-  transition: background .18s ease;
+  transition: background .18s ease, box-shadow .25s ease;
 }
 .lw-letter-track {
   width: 100%;
@@ -1279,9 +1289,17 @@ kbd {
   flex-wrap: wrap;
   align-items: flex-end;
   justify-content: center;
-  column-gap: clamp(3px, 1.2vw, 10px);
-  row-gap: 25px;
+  column-gap: clamp(6px, 1.6vw, 12px);
+  row-gap: clamp(18px, 5vw, 28px);
   pointer-events: none;
+}
+/* a word never breaks across lines */
+.lw-word {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  column-gap: clamp(2px, .6vw, 5px);
+  break-inside: avoid;
 }
 .lw-letter-slot {
   position: relative;
@@ -1291,33 +1309,48 @@ kbd {
   flex: 0 0 clamp(15px, 4.5vw, 29px);
   min-width: 15px;
   height: 43px;
-  border-bottom: 3px solid var(--muted, #92929b);
+  border-bottom: 3px solid var(--border, rgba(130,130,150,.38));
   color: var(--text, #292832);
   font-size: clamp(20px, 5.2vw, 30px);
   font-weight: 600;
   line-height: 1;
-  transition: color .15s ease, border-color .15s ease;
+  transition: color .15s ease, border-color .15s ease, transform .15s ease;
 }
-.lw-letter-slot.is-current { border-bottom-color: var(--accent, #8061e8); }
-.lw-letter-slot.is-filled.is-correct {
+.lw-letter-slot.is-current {
+  border-bottom-color: var(--accent, #8061e8);
+  box-shadow: 0 6px 10px -8px var(--accent, #8061e8);
+}
+.lw-letter-slot.is-filled {
   color: #229b68;
   border-bottom-color: #229b68;
+  animation: lw-slot-pop .18s ease;
 }
-.lw-letter-slot.is-filled:not(.is-correct) {
+.lw-letter-slot.is-wrong {
   color: #dc454c;
   border-bottom-color: #dc454c;
 }
-.lw-letter-space {
-  flex: 0 0 clamp(10px, 3vw, 20px);
+/* visible slot for the space between two words */
+.lw-word-gap {
+  flex: 0 0 clamp(14px, 3.6vw, 24px);
   height: 43px;
-  border-bottom: 3px solid transparent;
+  border-bottom: 3px solid var(--border, rgba(130,130,150,.24));
+  border-radius: 1px;
+  transition: border-color .15s ease, box-shadow .15s ease;
 }
+.lw-word-gap.is-current {
+  border-bottom-color: var(--accent, #8061e8);
+  box-shadow: 0 6px 10px -8px var(--accent, #8061e8);
+}
+.lw-word-gap.is-filled { border-bottom-color: rgba(34,155,104,.75); }
+.lw-word-gap.is-wrong { border-bottom-color: #dc454c; }
 .lw-typing-input {
   position: absolute !important;
   inset: 0 !important;
   width: 100% !important;
   height: 100% !important;
   opacity: .015 !important;
+  /* 16px+ keeps iOS Safari from zooming the page on focus */
+  font-size: 16px !important;
   color: transparent !important;
   caret-color: transparent !important;
   background: transparent !important;
@@ -1329,10 +1362,33 @@ kbd {
 .lw-typing-surface:focus-within {
   background: var(--surface-hover, rgba(128,97,232,.045));
 }
-.lw-typing-surface.is-complete .lw-letter-slot.is-current { border-bottom-color: #229b68; }
+/* sentence fully typed: everything turns green with a soft success pop */
+.lw-typing-surface.is-complete .lw-letter-slot.is-current {
+  border-bottom-color: #229b68;
+  box-shadow: none;
+}
+.lw-typing-surface.is-complete .lw-word-gap.is-current { border-bottom-color: rgba(34,155,104,.75); box-shadow: none; }
+.lw-typing-surface.is-complete { box-shadow: 0 0 0 2px rgba(34,155,104,.25), 0 10px 30px -18px rgba(34,155,104,.55); }
+.lw-typing-surface.is-complete .lw-letter-track { animation: lw-success-pop .45s ease; }
 .lw-typing-surface.lw-shake { animation: lw-character-shake .28s ease-in-out; }
+@keyframes lw-slot-pop {
+  0% { transform: translateY(3px) scale(.92); }
+  60% { transform: translateY(-1px) scale(1.04); }
+  100% { transform: translateY(0) scale(1); }
+}
+@keyframes lw-success-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.025); }
+  100% { transform: scale(1); }
+}
 @media (max-width: 480px) {
   .lw-typing-surface { min-height: 170px; padding: 24px 10px; }
-  .lw-letter-track { column-gap: 4px; row-gap: 22px; }
+  .lw-letter-track { row-gap: 22px; }
   .lw-letter-slot { height: 38px; }
+  .lw-word-gap { height: 38px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lw-letter-slot.is-filled,
+  .lw-typing-surface.is-complete .lw-letter-track,
+  .lw-typing-surface.lw-shake { animation: none; }
 }

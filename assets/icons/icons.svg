@@ -18,6 +18,7 @@
   <symbol id="chart" viewBox="0 0 24 24"><path d="M4 19V5"/><path d="M4 19h16"/><path d="m7 14 4-4 3 2 5-6"/></symbol>
   <symbol id="flame" viewBox="0 0 24 24"><path d="M12 22c4 0 7-3 7-7 0-3-2-5-4-7 0 3-2 4-2 4 0-5-3-8-5-10 1 5-4 8-4 13 0 4 3 7 8 7Z"/><path d="M10 18c0-2 2-4 3-5 2 3 2 4 2 5a3 3 0 0 1-5 0Z"/></symbol>
   <symbol id="audio" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15 9a5 5 0 0 1 0 6"/><path d="M18 6a9 9 0 0 1 0 12"/></symbol>
+  <symbol id="volumeX" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/></symbol>
   <symbol id="download" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></symbol>
   <symbol id="upload" viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 21h14"/></symbol>
   <symbol id="trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 10v6M14 10v6"/></symbol>
