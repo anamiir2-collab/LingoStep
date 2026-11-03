@@ -6,15 +6,17 @@
      #/section/:sec     lesson list of a section
      #/lesson/:id       lesson player
      #/review           revision hub
-     #/stats            statistics
-     #/settings         settings
+     #/stats            statistics (alias of progress)
+     #/settings         legacy → redirected to #/more
+     #/more             More hub (profile, preferences, app)
+     #/profile          profile page
    Pure helpers (parseHash/buildHash) are Node-testable.
    ============================================================ */
 
 import { getLang } from './settings.js';
 import { t } from './i18n.js';
 
-export const ROUTES = ['home', 'section', 'lesson', 'review', 'stats', 'settings'];
+export const ROUTES = ['home', 'section', 'lesson', 'review', 'stats', 'settings', 'more', 'profile'];
 
 /** Parse "lesson/lesson-013?x=1" → {name:'lesson', params:['lesson-013'], query:{}} */
 export function parseHash(hash) {

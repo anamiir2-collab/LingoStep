@@ -4,7 +4,7 @@
    statistics, settings. Wires router, settings, i18n, SW updates.
    ============================================================ */
 
-import { el, $, pct, formatDuration, toast } from './utils.js';
+import { el, $, pct, formatDuration, toast, normKey } from './utils.js';
 import { icon, iconLabel } from './icons.js';
 import { t } from './i18n.js';
 import { getSettings, saveSettings, applyDocumentSettings } from './settings.js';
@@ -13,23 +13,49 @@ import { getManifest, getManifestBySection } from './lesson-loader.js';
 import { renderLessonPlayer, renderErrorState } from './lesson-engine.js';
 import { getOverview, getToday, getDailyHistory, getAllLessonStates, exportBackup, importBackup, clearAllProgress } from './progress.js';
 import { dueCount, dueItems, availableTags, totalCount as reviewTotalCount } from './review.js';
-import { isSupported as speechSupported, loadVoices, englishVoices, speak } from './speech.js';
+import { isSupported as speechSupported, loadVoices, englishVoices, speak, stopSpeaking } from './speech.js';
+import { renderAudioSettingsPanel } from './audio-upgrade/ui.js';
 import { getTotalXp } from './xp.js';
 import { renderVocabularyView } from './vocabulary.js';
+import { renderBookDialoguesView } from './book-dialogues.js';
+import { renderDialoguePractice } from './dialogues.js';
 import { messageForFirstVisit } from './motivation.js';
+import { renderAchievementsView, renderAchievementsStrip } from './achievements.js';
+import { renderPlacementView } from './placement-view.js';
 
 const SECTIONS_META = [
-  { id: 'basics', icon: 'basics', en: 'Basics & Sentence Structure', ar: 'الأساسيات وبناء الجملة', descEn: 'SVO order, pronouns, articles, plurals, adjectives, prepositions', descAr: 'ترتيب الجملة، الضمائر، أدوات التعريف، الجمع، الصفات، حروف الجر' },
-  { id: 'tenses', icon: 'hourglass', en: 'English 16 Tenses Mastery', ar: 'إتقان الأزمنة الستة عشر', descEn: 'All 16 tense/aspect forms with clear contrast practice', descAr: 'كل صيغ الأزمنة الستة عشر مع تدريب مقارن واضح' },
-  { id: 'grammar', icon: 'grammar', en: 'Grammar, Questions & Negation', ar: 'القواعد والأسئلة والنفي', descEn: 'Questions, modals, conditionals, passive, reported speech', descAr: 'الأسئلة، الأفعال الناقصة، الشرط، المبني للمجهول، الكلام المنقول' },
-  { id: 'conversations', icon: 'conversation', en: 'Daily English Conversations', ar: 'المحادثات اليومية', descEn: 'Greetings, family, shopping, food, phone calls, opinions', descAr: 'التحيات، العائلة، التسوق، الطعام، الهاتف، آراء وتفضيلات' },
-  { id: 'practical-scenarios', icon: 'compass', en: 'Travel, Work & Practical Situations', ar: 'السفر والعمل والمواقف العملية', descEn: 'Airports, hotels, directions, meetings, interviews, emergencies', descAr: 'المطارات، الفنادق، الاتجاهات، الاجتماعات، المقابلات، الطوارئ' },
-  { id: 'vocabulary', icon: 'book', en: 'Vocabulary & Common Expressions', ar: 'المفردات والتعبيرات الشائعة', descEn: 'High-frequency words, phrasal verbs, collocations, idioms', descAr: 'مفردات شائعة، أفعال مركبة، متلازمات لفظية، تعبيرات اصطلاحية' },
-  { id: 'listening-writing', icon: 'headphones', en: 'Listening, Dictation & Writing', ar: 'الاستماع والإملاء والكتابة', descEn: 'Dictation, paragraphs, punctuation, correction, reordering', descAr: 'إملاء، فقرات قصيرة، ترقيم، تصحيح، ترتيب الكلمات' },
+  { id: 'foundations', icon: 'basics', en: 'Foundations & Core Communication', ar: 'التأسيس والتواصل الأساسي', descEn: 'Greetings, self-introduction, pronouns, numbers, question words, first sentences, pronunciation inside words', descAr: 'التحيات، التعريف بالنفس، الضمائر، الأرقام، أدوات الاستفهام، أولى الجمل، النطق داخل الكلمات والجمل' },
+  { id: 'daily-life', icon: 'sun', en: 'Simple Daily Life', ar: 'الحياة اليومية البسيطة', descEn: 'Routines, time, polite requests, phone calls, descriptions, feelings, directions, cafés and transport', descAr: 'الروتين، الوقت، الطلبات المهذبة، المكالمات، الوصف، المشاعر، الاتجاهات، المقهى والمواصلات' },
+  { id: 'home-family', icon: 'home', en: 'Home & Family', ar: 'المنزل والأسرة', descEn: 'Family ties, rooms, cleaning, cooking, groceries, repairs, guests, neighbors, bills and home safety', descAr: 'الأقارب، الغرف، التنظيف، الطبخ، البقالة، الإصلاحات، الضيوف، الجيران، الفواتير والسلامة' },
+  { id: 'food-services', icon: 'package', en: 'Food, Shopping & Services', ar: 'الطعام والتسوق والخدمات', descEn: 'Restaurants, allergies, supermarkets, clothes, returns, complaints, pharmacies, banks and the post office', descAr: 'المطاعم، الحساسية، السوبر ماركت، الملابس، الاسترجاع، الشكاوى، الصيدلية، البنك والبريد' },
+  { id: 'travel', icon: 'compass', en: 'Mobility & Travel', ar: 'التنقل والسفر', descEn: 'Buses, metro, driving, trains, airports, hotels, customs, currency, tours and travel problems', descAr: 'الحافلات، المترو، القيادة، القطارات، المطار، الفنادق، الجمارك، العملات والجولات' },
+  { id: 'health-emergency', icon: 'alert', en: 'Health & Emergencies', ar: 'الصحة والطوارئ', descEn: 'Doctors, symptoms, medicine, hospitals, insurance, emergency calls, first aid, healthy habits and caregiving', descAr: 'الأطباء، الأعراض، الدواء، المستشفى، التأمين، الطوارئ، الإسعافات، العادات الصحية والرعاية' },
+  { id: 'social-communication', icon: 'conversation', en: 'Relationships & Social Communication', ar: 'العلاقات والتواصل الاجتماعي', descEn: 'Small talk, invitations, opinions, advice, boundaries, friendship, celebrations and etiquette', descAr: 'الدردشة، الدعوات، الآراء، النصيحة، الحدود الشخصية، الصداقة، المناسبات وآداب التواصل' },
+  { id: 'work-money', icon: 'chart', en: 'Work & Money', ar: 'العمل والمال', descEn: 'CVs, interviews, meetings, emails, presentations, salaries, budgeting, banks, contracts and invoices', descAr: 'السيرة الذاتية، المقابلات، الاجتماعات، البريد المهني، الرواتب، الميزانية، البنوك والعقود' },
+  { id: 'education-digital', icon: 'monitor', en: 'Education & Digital Skills', ar: 'التعليم والمهارات الرقمية', descEn: 'Schools, courses, exams, online learning, devices, security, video calls, AI tools and study skills', descAr: 'المدارس، الدورات، الامتحانات، التعلم الرقمي، الأجهزة، الأمان، مكالمات الفيديو وأدوات الذكاء' },
+  { id: 'complex-rights', icon: 'grammar', en: 'Complex Situations & Rights', ar: 'المواقف المعقدة والحقوق', descEn: 'Formal complaints, refunds, landlord issues, police reports, insurance claims, passports and legal letters', descAr: 'الشكاوى الرسمية، الاسترجاع، المالك والمستأجر، بلاغات الشرطة، التأمين، الجوازات والخطابات' },
+  { id: 'specialized', icon: 'trophy', en: 'Specialized English & Leadership', ar: 'التخصصات والقيادة', descEn: 'Business, finance, healthcare, technology, tourism, legal and HR English, leadership and public speaking', descAr: 'إنجليزية الأعمال والمال والصحة والتكنولوجيا والسياحة والقانون، القيادة والتحدث أمام الجمهور' },
 ];
 
 let appRoot = null;
 let currentLang = 'en';
+
+const APP_VERSION = '8.0.0';
+
+/* ---- UI refresh (v7): shared helpers for the redesigned home/courses ---- */
+const ACCENTS = ['blue', 'orange', 'purple', 'teal', 'green'];
+const accentFor = (i) => ACCENTS[((i % ACCENTS.length) + ACCENTS.length) % ACCENTS.length];
+
+function filterEmptyState(L) {
+  return el('div', { class: 'state-box', style: { padding: '1.5rem', textAlign: 'center' } }, [
+    el('div', { class: 'big' }, [icon('leaf')]),
+    el('p', { class: 'muted', style: { margin: '.4rem 0 0' }, text: t(L, 'uiEmptyFilter') }),
+  ]);
+}
+
+function sectionDone(list, states) {
+  return list.filter((l) => states[l.id]?.completed).length;
+}
 
 /* ============================================================
    Boot
@@ -71,26 +97,21 @@ async function boot() {
 
 function renderShell() {
   const L = currentLang;
-  const s = getSettings();
-  const initial = (s.userName || '').trim().charAt(0).toUpperCase();
   const header = el('header', { class: 'app-header' }, [
     el('div', { class: 'header-inner' }, [
       el('a', { class: 'brand', href: '#/' }, [
-        el('span', { class: 'brand-badge', text: 'L', 'aria-hidden': 'true' }),
+        el('img', { class: 'brand-badge', src: './icons/icon-192.png', alt: '', width: '38', height: '38', decoding: 'async' }),
         el('span', { class: 'brand-name', text: 'LingoStep' }),
       ]),
       el('nav', { class: 'main-nav', 'aria-label': 'Main' }, [
         navLink('navHome', '#/', 'home'),
         navLink('navSections', '#/sections', 'sections'),
         navLink('navVocabulary', '#/vocabulary', 'vocabulary'),
+        navLink('navDialogues', '#/dialogues', 'dialogues'),
         navLink('navProgress', '#/progress', 'progress'),
         navLink('navReview', '#/review', 'review'),
-        navLink('navSettings', '#/settings', 'settings'),
+        navLink('navMore', '#/more', 'more'),
       ]),
-      el('button', { class: 'icon-btn', title: t(L, 'interfaceLanguage'), 'aria-label': t(L, 'interfaceLanguage'), text: L === 'ar' ? 'EN' : 'ع', onclick: toggleLanguage }),
-      el('button', { class: 'icon-btn', title: t(L, 'theme'), 'aria-label': t(L, 'theme'), onclick: cycleTheme }, [icon('theme')]),
-      el('button', { class: 'avatar-btn', title: t(L, 'avatarLabel'), 'aria-label': t(L, 'avatarLabel'), onclick: () => navigate('settings') },
-        initial ? [el('span', { text: initial, 'aria-hidden': 'true' })] : [icon('user')]),
     ]),
   ]);
 
@@ -99,12 +120,15 @@ function renderShell() {
     el('span', { text: t(L, 'footerNote') }),
   ]);
 
-  // Mobile floating navigation: Home / Sections / Vocabulary / Progress.
+  // Mobile bottom navigation — five one-hand-friendly destinations.
+  // Dialogues, revision, achievements and profile stay one tap away
+  // from Home quick actions and the More hub.
   const mobileNav = el('nav', { class: 'mobile-bottom-nav', 'aria-label': L === 'ar' ? 'التنقل الرئيسي' : 'Primary navigation' }, [
     mobileNavLink('navHome', '#/', 'home', 'home'),
     mobileNavLink('navSections', '#/sections', 'sections', 'grid'),
     mobileNavLink('navVocabulary', '#/vocabulary', 'vocabulary', 'book'),
     mobileNavLink('navProgress', '#/progress', 'progress', 'chart'),
+    mobileNavLink('navMore', '#/more', 'more', 'more'),
   ]);
 
   appRoot.replaceChildren(header, main, footer, mobileNav);
@@ -129,14 +153,15 @@ function mobileNavLink(labelKey, href, routeName, iconName) {
 
 function updateNavState(routeName) {
   // Desktop header links highlight per exact destination group.
-  const desktopMap = { home: 'home', sections: 'sections', section: 'sections', lesson: 'sections', vocabulary: 'vocabulary', progress: 'progress', stats: 'progress', review: 'review', settings: 'settings' };
+  const desktopMap = { home: 'home', sections: 'sections', section: 'sections', lesson: 'sections', vocabulary: 'vocabulary', dialogues: 'vocabulary', progress: 'progress', stats: 'progress', review: 'progress', achievements: 'progress', settings: 'more', more: 'more', profile: 'more' };
   document.querySelectorAll('.nav-link').forEach((a) => {
     if (a.dataset.route === desktopMap[routeName]) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
 
-  // Mobile bar destinations; review lives under Home, settings under the avatar.
-  const mobileMap = { home: 'home', review: 'home', sections: 'sections', section: 'sections', lesson: 'sections', vocabulary: 'vocabulary', progress: 'progress', stats: 'progress' };
+  // Mobile bar destinations; review/achievements live under Progress,
+  // dialogues under Vocabulary, everything secondary under More.
+  const mobileMap = { home: 'home', review: 'progress', sections: 'sections', section: 'sections', lesson: 'sections', vocabulary: 'vocabulary', dialogues: 'vocabulary', progress: 'progress', stats: 'progress', achievements: 'progress', settings: 'more', more: 'more', profile: 'more' };
   const target = mobileMap[routeName] || '';
   [...document.querySelectorAll('.mobile-nav-link')].forEach((a) => {
     const active = a.dataset.route === target;
@@ -144,25 +169,6 @@ function updateNavState(routeName) {
     if (active) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
-}
-
-function toggleLanguage() {
-  const next = currentLang === 'ar' ? 'en' : 'ar';
-  saveSettings({ lang: next });
-  currentLang = next;
-  applyDocumentSettings();
-  renderShell();
-  onChangeRerun();
-}
-
-function cycleTheme() {
-  const cur = getSettings().theme;
-  const order = ['system', 'light', 'dark'];
-  const next = order[(order.indexOf(cur) + 1) % order.length];
-  saveSettings({ theme: next });
-  applyDocumentSettings();
-  import('./utils.js').then(({ toast }) =>
-    toast(next === 'light' ? 'Light' : next === 'dark' ? 'Dark' : 'System', 1400));
 }
 
 function onChangeRerun() {
@@ -180,6 +186,9 @@ function onChangeRerun() {
 async function handleRoute(route) {
   const view = document.getElementById('view');
   if (!view) return;
+  // remove any leftover practice overlays (feedback sheet, combo badge)
+  document.querySelectorAll('.duo-sheet-wrap, .duo-backdrop, .combo-badge').forEach((n) => n.remove());
+  stopSpeaking(); // never let practice audio leak into the next screen
   window.scrollTo(0, 0);
   updateNavState(route.name);
 
@@ -189,9 +198,15 @@ async function handleRoute(route) {
     if (route.name === 'section') return await viewSection(view, route.params[0]);
     if (route.name === 'lesson') return await viewLesson(view, route.params[0]);
     if (route.name === 'vocabulary') return await viewVocabulary(view);
+    if (route.name === 'dialogues') return await renderBookDialoguesView(view, route.params, currentLang);
+    if (route.name === 'dialogue-practice') return await renderDialoguePractice(view, route.params, currentLang);
     if (route.name === 'review') return await viewReview(view);
     if (route.name === 'progress' || route.name === 'stats') return await viewProgress(view);
-    if (route.name === 'settings') return await viewSettings(view);
+    if (route.name === 'achievements') return await viewAchievements(view);
+    if (route.name === 'placement') return await renderPlacementView(view); // v8: restored access (feature existed but was unreachable)
+    if (route.name === 'settings') { navigate('more'); return; } // legacy route → More hub
+    if (route.name === 'more') return await viewMore(view);
+    if (route.name === 'profile') return await viewProfile(view);
     return await viewDashboard(view);
   } catch (err) {
     renderErrorState(view, currentLang, err);
@@ -229,11 +244,148 @@ async function viewDashboard(view) {
   const goalPct = pct(today.count, settings.dailyGoal);
   const goalLeft = Math.max(0, settings.dailyGoal - today.count);
 
-  // ---- hero: today's plan (personalized, never shows a raw placeholder) ----
+  // ---- welcome header: greeting + name + avatar (reference home screen) ----
   const name = (settings.userName || '').trim();
-  const [greetKey, greetKeyName] = greetingPair();
-  const greeting = name ? t(L, greetKeyName, { name }) : t(L, greetKey);
+  const [greetKey] = greetingPair();
 
+  const homeHead = el('div', { class: 'home-head' }, [
+    el('div', { class: 'home-titles' }, [
+      el('span', { class: 'home-greet', text: t(L, greetKey) }),
+      el('h1', { class: 'home-name' }, [
+        el('span', { text: name || t(L, 'uiGuestName') }),
+        el('span', { class: 'wave', text: '\u{1F44B}', 'aria-hidden': 'true' }),
+      ]),
+    ]),
+    el('a', {
+      class: 'home-avatar', href: '#/profile', 'aria-label': t(L, 'profileTitle'),
+    }, name ? [el('span', { text: name.charAt(0).toUpperCase() })] : [icon('user')]),
+  ]);
+
+  // ---- search bar + filter button (live results over sections & lessons) ----
+  const searchInput = el('input', {
+    type: 'search', placeholder: t(L, 'uiSearchPlaceholder'),
+    'aria-label': t(L, 'uiSearchHint'), autocomplete: 'off', spellcheck: 'false',
+  });
+  const searchPop = el('div', { class: 'search-pop' });
+  const searchBox = el('div', { class: 'home-search' }, [icon('search'), searchInput]);
+  const catRow = el('div', { class: 'cat-row' });
+  const filterBtn = el('button', {
+    class: 'filter-btn', type: 'button', 'aria-label': t(L, 'uiSearchHint'),
+    'aria-expanded': 'true', 'aria-controls': 'home-cat-row',
+    onclick: () => {
+      const show = catRow.hidden; // hidden -> show
+      catRow.hidden = !show;
+      filterBtn.setAttribute('aria-expanded', show ? 'true' : 'false');
+    },
+  }, [icon('sliders')]);
+  const searchRow = el('div', { class: 'home-search-row' }, [searchBox, filterBtn, searchPop]);
+
+  const renderSearchPop = () => {
+    const q = normKey(searchInput.value);
+    if (q.length < 2) { searchPop.replaceChildren(); return; }
+    const manifest = getManifest();
+    const hits = [];
+    for (const meta of SECTIONS_META) {
+      const hay = normKey(`${meta.en} ${meta.ar} ${meta.descEn} ${meta.descAr}`);
+      if (hay.includes(q)) {
+        hits.push(el('a', { class: 'search-hit', href: `#/section/${meta.id}` }, [
+          el('span', { class: 'hit-icon' }, [icon(meta.icon)]),
+          el('span', { class: 'hit-titles' }, [
+            el('span', { class: 'hit-t', text: L === 'ar' ? meta.ar : meta.en }),
+            el('span', { class: 'hit-s', text: L === 'ar' ? meta.descAr : meta.descEn }),
+          ]),
+          el('span', { class: 'chip hit-chip', text: t(L, 'uiSearchHitSection') }),
+        ]));
+      }
+    }
+    for (const les of manifest) {
+      if (hits.length >= 14) break;
+      const hay = normKey(`${les.title} ${les.titleAr} ${les.id}`);
+      if (!hay.includes(q)) continue;
+      hits.push(el('a', { class: 'search-hit', href: `#/lesson/${les.id}` }, [
+        el('span', { class: 'hit-icon' }, [icon('play')]),
+        el('span', { class: 'hit-titles' }, [
+          el('span', { class: 'hit-t', text: les.title }),
+          el('span', { class: 'hit-s', text: `${les.titleAr} · ${les.level}` }),
+        ]),
+        el('span', { class: 'chip hit-chip', text: t(L, 'lesson') }),
+      ]));
+    }
+    searchPop.replaceChildren(...(hits.length
+      ? hits.slice(0, 14)
+      : [el('p', { class: 'search-empty', text: t(L, 'uiSearchNoResults') })]));
+  };
+  searchInput.addEventListener('input', renderSearchPop);
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { searchInput.value = ''; renderSearchPop(); searchInput.blur(); }
+  });
+
+  // ---- category pills (real progress states) + colorful course cards ----
+  let homeFilter = 'all';
+  const catDefs = [
+    { key: 'all', label: 'uiFilterAll', accent: 'blue', icon: 'grid' },
+    { key: 'ongoing', label: 'uiFilterOngoing', accent: 'orange', icon: 'clock' },
+    { key: 'new', label: 'uiFilterNew', accent: 'purple', icon: 'sparkle' },
+    { key: 'completed', label: 'uiFilterCompleted', accent: 'green', icon: 'check' },
+  ];
+  catRow.id = 'home-cat-row';
+
+  const manifest = getManifest();
+  const buildPathCards = () => SECTIONS_META
+    .map((meta, i) => ({ meta, i, list: manifest.filter((l) => l.section === meta.id) }))
+    .filter(({ list }) => {
+      const done = sectionDone(list, states);
+      if (homeFilter === 'ongoing') return done > 0 && done < list.length;
+      if (homeFilter === 'new') return done === 0;
+      if (homeFilter === 'completed') return list.length > 0 && done === list.length;
+      return true;
+    })
+    .map(({ meta, i, list }) => {
+      const done = sectionDone(list, states);
+      const donePctv = pct(done, list.length);
+      const sentences = list.reduce((s, l) => s + (l.exercises || 0), 0);
+      return el('a', {
+        class: 'path-card', href: `#/section/${meta.id}`, 'data-accent': accentFor(i),
+      }, [
+        el('span', { class: 'section-icon' }, [icon(meta.icon)]),
+        el('h3', { text: L === 'ar' ? meta.ar : meta.en }),
+        el('p', { class: 'path-desc', text: L === 'ar' ? meta.descAr : meta.descEn }),
+        el('div', { class: 'path-meta' }, [
+          el('span', { class: 'path-chip' }, [icon('books'), el('span', { text: t(L, 'sectionLessons', { n: formatNumber(list.length) }) })]),
+          el('span', { class: 'path-chip' }, [icon('pen'), el('span', { text: `${formatNumber(sentences)} ${t(L, 'sentences')}` })]),
+        ]),
+        el('div', { class: 'progress' }, [el('span', { style: { width: `${donePctv}%` } })]),
+        el('div', { class: 'path-foot' }, [
+          el('span', { class: 'path-count', text: `${formatNumber(done)}/${formatNumber(list.length)} ${t(L, 'markDone')}` }),
+          el('span', { class: 'path-pct', text: `${donePctv}%` }),
+        ]),
+      ]);
+    });
+
+  const pathsGrid = el('div', { class: 'home-paths' });
+  const renderPathsGrid = () => {
+    const cards = buildPathCards();
+    pathsGrid.replaceChildren(...(cards.length ? cards : [filterEmptyState(L)]));
+  };
+  renderPathsGrid();
+
+  for (const def of catDefs) {
+    const pill = el('button', {
+      class: 'cat-pill', type: 'button', 'data-accent': def.accent,
+      'aria-pressed': homeFilter === def.key ? 'true' : 'false',
+    }, [
+      el('span', { class: 'cat-dot' }, [icon(def.icon)]),
+      el('span', { text: t(L, def.label) }),
+    ]);
+    pill.addEventListener('click', () => {
+      homeFilter = def.key;
+      [...catRow.children].forEach((c) => c.setAttribute('aria-pressed', c === pill ? 'true' : 'false'));
+      renderPathsGrid();
+    });
+    catRow.append(pill);
+  }
+
+  // ---- hero: today's plan (personalized, never shows a raw placeholder) ----
   const heroStats = el('div', { class: 'hero-stats' }, [
     el('div', { class: 'hero-stat' }, [icon('pen'), el('span', { text: `${formatNumber(today.count)} / ${formatNumber(settings.dailyGoal)} ${t(L, 'goalDoneToday')}` })]),
     el('div', { class: 'hero-stat' }, [icon('clock'), el('span', { text: `${formatDuration(today.timeMs)} ${t(L, 'todayTime')}` })]),
@@ -242,20 +394,19 @@ async function viewDashboard(view) {
 
   const hero = el('section', { class: 'hero', 'aria-label': t(L, 'todaysPlan') }, [
     el('span', { class: 'hero-kicker' }, [icon('sparkle'), t(L, 'todaysPlan')]),
-    el('h1', { text: greeting }),
-    el('p', { class: 'hero-sub', text: t(L, 'todaysPlanSub') }),
+    el('h1', { text: t(L, 'todaysPlanSub') }),
     el('div', { class: 'hero-grid' }, [
       el('div', {
         class: 'goal-ring',
         style: { '--pct': String(Math.min(100, goalPct)) },
         role: 'img',
         'aria-label': `${goalPct}%`,
-      }, [el('div', { class: 'goal-ring-inner', text: `${goalPct}%` })]),
+      }, [el('div', { class: 'goal-ring-inner', text: `${Math.min(100, goalPct)}%` })]),
       heroStats,
       el('div', { class: 'hero-actions' }, [
         overview.lastLessonId
           ? el('a', { class: 'btn', href: `#/lesson/${overview.lastLessonId}` }, [iconLabel('play', t(L, 'continueWhere'))])
-          : el('a', { class: 'btn', href: `#/section/basics` }, [iconLabel('play', t(L, 'startNow'))]),
+          : el('a', { class: 'btn', href: `#/section/foundations` }, [iconLabel('play', t(L, 'startNow'))]),
         el('a', { class: 'btn btn-ghost', href: '#/review' }, [iconLabel('review', t(L, 'quickReview'))]),
       ]),
     ]),
@@ -302,7 +453,60 @@ async function viewDashboard(view) {
     ]),
   ]);
 
-  view.replaceChildren(hero, statGrid, ...(firstVisitCard ? [firstVisitCard] : []), goalCard, reviewCard);
+  // ---- quick actions: every feature stays one tap away (v8 five-tab nav) ----
+  const quickActions = el('div', { class: 'quick-actions' }, [
+    el('a', { class: 'qa-card qa-teal', href: '#/dialogues' }, [
+      el('span', { class: 'qa-icon' }, [icon('conversation')]),
+      el('span', { class: 'qa-label', text: t(L, 'navDialogues') }),
+    ]),
+    el('a', { class: 'qa-card qa-purple', href: '#/review' }, [
+      el('span', { class: 'qa-icon' }, [icon('review')]),
+      el('span', { class: 'qa-label', text: t(L, 'navReview') }),
+    ]),
+    el('a', { class: 'qa-card qa-orange', href: '#/achievements' }, [
+      el('span', { class: 'qa-icon' }, [icon('trophy')]),
+      el('span', { class: 'qa-label', text: t(L, 'achTitle') }),
+    ]),
+    el('a', { class: 'qa-card qa-blue', href: '#/placement' }, [
+      el('span', { class: 'qa-icon' }, [icon('compass')]),
+      el('span', { class: 'qa-label', text: t(L, 'placeShort') }),
+    ]),
+  ]);
+
+  // ---- achievements strip (real computed badges; taps → full screen) ----
+  const achSection = el('section', { class: 'home-ach-section', 'aria-label': t(L, 'achTitle') }, [
+    el('div', { class: 'section-head row-between' }, [
+      el('div', {}, [
+        el('h2', { text: t(L, 'achStripTitle') }),
+        el('p', { text: t(L, 'achStripSub') }),
+      ]),
+      el('a', { class: 'btn btn-sm', href: '#/achievements' }, [iconLabel('trophy', t(L, 'achSeeAll'))]),
+    ]),
+    el('div', { class: 'ach-strip-host', id: 'home-ach-strip' }, [el('div', { class: 'spinner', role: 'status' })]),
+  ]);
+
+  // ---- learning paths: quick access to every section with real progress ----
+  const pathsSection = el('section', { class: 'home-paths-section', 'aria-label': t(L, 'learningPaths') }, [
+    el('div', { class: 'section-head row-between' }, [
+      el('div', {}, [
+        el('h2', { text: t(L, 'learningPaths') }),
+        el('p', { text: t(L, 'learningPathsSub') }),
+      ]),
+      el('a', { class: 'btn btn-sm', href: '#/sections' }, [iconLabel('grid', t(L, 'viewAll'))]),
+    ]),
+    pathsGrid,
+  ]);
+
+  view.replaceChildren(homeHead, searchRow, catRow, pathsSection, hero, quickActions, statGrid, achSection, ...(firstVisitCard ? [firstVisitCard] : []), goalCard, reviewCard);
+
+  // achievements strip loads async (real data) without blocking the dashboard
+  renderAchievementsStrip().then((strip) => {
+    const host = document.getElementById('home-ach-strip');
+    if (host) host.replaceChildren(strip);
+  }).catch(() => {
+    const host = document.getElementById('home-ach-strip');
+    if (host) host.remove();
+  });
 }
 
 function statCard(value, label, iconName) {
@@ -325,37 +529,125 @@ async function viewSections(view) {
   loading(view);
   docTitle('navSections');
   const L = currentLang;
-  const manifest = getManifest();
-  const states = await getAllLessonStates();
-
-  const head = el('div', { class: 'page-head' }, [
-    el('h2', { text: t(L, 'sectionsTitle') }),
-    el('p', { text: t(L, 'sectionsIntro') }),
+  const [manifest, states, overview] = await Promise.all([
+    Promise.resolve(getManifest()), getAllLessonStates(), getOverview(),
   ]);
 
-  const grid = el('div', { class: 'section-grid' });
-  for (const meta of SECTIONS_META) {
-    const list = manifest.filter((l) => l.section === meta.id);
-    const sentences = list.reduce((s, l) => s + (l.exercises || 0), 0);
-    const done = list.filter((l) => states[l.id]?.completed).length;
-    const donePct = pct(done, list.length);
-    grid.append(el('a', { class: 'section-card', href: `#/section/${meta.id}` }, [
-      el('div', { class: 'row' }, [
-        el('span', { class: 'section-icon' }, [icon(meta.icon)]),
-        el('div', { class: 'grow' }, [
-          el('h3', { text: L === 'ar' ? meta.ar : meta.en }),
-          el('div', { class: 'sub', text: `${t(L, 'sectionLessons', { n: formatNumber(list.length) })} · ${formatNumber(sentences)} ${t(L, 'sentences')}` }),
-        ]),
-      ]),
-      el('div', { class: 'progress' }, [el('span', { style: { width: `${donePct}%` } })]),
-      el('div', { class: 'row-between small muted' }, [
-        el('span', { text: `${done}/${list.length} ${t(L, 'markDone')}` }),
-        el('span', { text: `${donePct}%` }),
-      ]),
-    ]));
-  }
+  // ---- toolbar: back navigation + page title + search toggle ----
+  const searchArea = el('div', { class: 'page-search', hidden: true });
+  const searchToggle = el('button', {
+    class: 'btn btn-round', type: 'button', 'aria-label': t(L, 'uiSearchHint'),
+    'aria-expanded': 'false',
+    onclick: () => {
+      const show = searchArea.hidden; // hidden -> show
+      searchArea.hidden = !show;
+      searchToggle.setAttribute('aria-expanded', show ? 'true' : 'false');
+      if (show) pageInput.focus();
+    },
+  }, [icon('search')]);
 
-  view.replaceChildren(head, grid);
+  const toolbar = el('div', { class: 'page-toolbar' }, [
+    el('a', { class: 'btn btn-round', href: '#/', 'aria-label': t(L, 'uiBack') }, [icon('arrowLeft')]),
+    el('div', { class: 'pt-titles' }, [
+      el('h2', { text: t(L, 'uiCoursesTitle') }),
+      el('p', { class: 'pt-sub', text: t(L, 'uiCoursesSub') }),
+    ]),
+    searchToggle,
+  ]);
+
+  const pageInput = el('input', {
+    type: 'search', placeholder: t(L, 'uiSearchPlaceholder'),
+    'aria-label': t(L, 'uiSearchHint'), autocomplete: 'off', spellcheck: 'false',
+  });
+  searchArea.append(el('div', { class: 'home-search' }, [icon('search'), pageInput]));
+
+  // ---- filters: All / Ongoing / Completed (real section states) ----
+  let secFilter = 'all';
+  const filterRow = el('div', { class: 'course-filters', role: 'group', 'aria-label': t(L, 'uiFilterAll') });
+  const secDefs = [
+    { key: 'all', label: 'uiFilterAll', accent: 'blue', icon: 'grid' },
+    { key: 'ongoing', label: 'uiFilterOngoing', accent: 'orange', icon: 'clock' },
+    { key: 'completed', label: 'uiFilterCompleted', accent: 'purple', icon: 'check' },
+  ];
+
+  const grid = el('div', { class: 'section-grid' });
+  const buildSectionCards = () => SECTIONS_META
+    .map((meta, i) => ({ meta, i, list: manifest.filter((l) => l.section === meta.id) }))
+    .filter(({ list }) => {
+      const done = sectionDone(list, states);
+      if (secFilter === 'ongoing') return done > 0 && done < list.length;
+      if (secFilter === 'completed') return list.length > 0 && done === list.length;
+      return true;
+    })
+    .filter(({ meta, list }) => {
+      const q = normKey(pageInput.value || '');
+      if (q.length < 2) return true;
+      const hay = normKey(`${meta.en} ${meta.ar} ${meta.descEn} ${meta.descAr}`);
+      const inLessons = list.some((l) => normKey(`${l.title} ${l.titleAr}`).includes(q));
+      return hay.includes(q) || inLessons;
+    })
+    .map(({ meta, i, list }) => {
+      const sentences = list.reduce((s, l) => s + (l.exercises || 0), 0);
+      const done = sectionDone(list, states);
+      const donePctv = pct(done, list.length);
+      return el('a', {
+        class: 'section-card', href: `#/section/${meta.id}`, 'data-accent': accentFor(i),
+      }, [
+        el('span', { class: 'sc-badge', text: `${donePctv}%` }),
+        el('div', { class: 'row' }, [
+          el('span', { class: 'section-icon' }, [icon(meta.icon)]),
+          el('div', { class: 'grow' }, [
+            el('h3', { text: L === 'ar' ? meta.ar : meta.en }),
+            el('div', { class: 'sub', text: `${t(L, 'sectionLessons', { n: formatNumber(list.length) })} · ${formatNumber(sentences)} ${t(L, 'sentences')}` }),
+          ]),
+        ]),
+        el('div', { class: 'progress' }, [el('span', { style: { width: `${donePctv}%` } })]),
+        el('div', { class: 'row-between small' }, [
+          el('span', { text: `${formatNumber(done)}/${formatNumber(list.length)} ${t(L, 'markDone')}` }),
+          el('span', { text: `${donePctv}%` }),
+        ]),
+      ]);
+    });
+
+  const renderGrid = () => {
+    const cards = buildSectionCards();
+    grid.replaceChildren(...(cards.length ? cards : [filterEmptyState(L)]));
+  };
+
+  for (const def of secDefs) {
+    const chip = el('button', {
+      class: 'filter-chip', type: 'button', 'data-accent': def.accent,
+      'aria-pressed': secFilter === def.key ? 'true' : 'false',
+    }, [
+      el('span', { class: 'fc-dot' }, [icon(def.icon)]),
+      el('span', { text: t(L, def.label) }),
+    ]);
+    chip.addEventListener('click', () => {
+      secFilter = def.key;
+      [...filterRow.children].forEach((c) => c.setAttribute('aria-pressed', c === chip ? 'true' : 'false'));
+      renderGrid();
+    });
+    filterRow.append(chip);
+  }
+  pageInput.addEventListener('input', renderGrid);
+
+  // ---- promotional banner → jumps to the lesson you left / next open course ----
+  const firstOpenSection = SECTIONS_META
+    .map((meta) => ({ meta, list: manifest.filter((l) => l.section === meta.id) }))
+    .find(({ list }) => list.some((l) => !states[l.id]?.completed));
+  const bannerHref = overview.lastLessonId
+    ? `#/lesson/${overview.lastLessonId}`
+    : (firstOpenSection ? `#/section/${firstOpenSection.meta.id}` : '#/');
+
+  const banner = el('section', { class: 'promo-banner', 'aria-label': t(L, 'uiBannerTitle') }, [
+    el('h3', { text: t(L, 'uiBannerTitle') }),
+    el('p', { text: t(L, 'uiBannerSub') }),
+    el('a', { class: 'promo-cta', href: bannerHref, text: t(L, 'uiBannerCta') }),
+    el('span', { class: 'promo-art', 'aria-hidden': 'true' }, [icon('compass')]),
+  ]);
+
+  renderGrid();
+  view.replaceChildren(toolbar, searchArea, filterRow, banner, grid);
 }
 
 /* ============================================================
@@ -377,14 +669,24 @@ async function viewSection(view, sectionId) {
   const items = el('div', { class: 'lesson-list' });
   list.forEach((entry, i) => {
     const st = states[entry.id];
-    const cls = st?.completed ? 'done' : (st && Object.keys(st.attempted || {}).length ? 'active' : '');
-    items.append(el('a', { class: `lesson-item ${cls}`, href: `#/lesson/${entry.id}` }, [
-      el('span', { class: 'lesson-num' }, st?.completed ? [icon('check')] : [el('span', { text: String(i + 1) })]),
+    // Unlock lessons in order: every earlier lesson in this section must be completed.
+    const locked = list.slice(0, i).some((previous) => !states[previous.id]?.completed);
+    const cls = [st?.completed ? 'done' : (st && Object.keys(st.attempted || {}).length ? 'active' : ''), locked ? 'locked' : ''].filter(Boolean).join(' ');
+    const itemTag = locked ? 'div' : 'a';
+    const itemAttrs = locked
+      ? { class: `lesson-item ${cls}`, 'aria-disabled': 'true', title: L === 'ar' ? 'أكمل الدروس السابقة لفتح هذا الدرس' : 'Complete previous lessons to unlock this lesson' }
+      : { class: `lesson-item ${cls}`, href: `#/lesson/${entry.id}` };
+    items.append(el(itemTag, itemAttrs, [
+      el('span', { class: 'lesson-num' }, locked ? [icon('lock')] : (st?.completed ? [icon('check')] : [el('span', { text: String(i + 1) })])),
       el('div', { class: 'lesson-titles' }, [
         el('div', { class: 't', text: entry.title }),
-        el('div', { class: 's', text: `${entry.titleAr} · ${entry.level} · ${entry.exercises} ${t(L, 'exercises')}` }),
+        el('div', { class: 's', text: locked
+          ? (L === 'ar' ? 'أكمل الدروس السابقة لفتح هذا الدرس' : 'Complete previous lessons to unlock')
+          : `${entry.titleAr} · ${entry.level} · ${entry.exercises} ${t(L, 'exercises')}` }),
       ]),
-      el('span', { class: `chip ${st?.completed ? 'chip-done' : 'chip'}`, text: st?.completed ? t(L, 'markDone') : `${pct(Object.keys(st?.attempted || {}).length, entry.exercises)}%` }),
+      el('span', { class: `chip ${locked ? 'chip-locked' : (st?.completed ? 'chip-done' : 'chip')}`, text: locked
+        ? (L === 'ar' ? 'مقفل' : 'Locked')
+        : (st?.completed ? t(L, 'markDone') : `${pct(Object.keys(st?.attempted || {}).length, entry.exercises)}%`) }),
     ]));
   });
 
@@ -408,7 +710,20 @@ async function viewSection(view, sectionId) {
 
 async function viewLesson(view, lessonId) {
   loading(view);
-  const settings = getSettings();
+  const entry = getManifest().find((lesson) => lesson.id === lessonId);
+  if (entry) {
+    const states = await getAllLessonStates();
+    const sectionLessons = getManifestBySection(entry.section);
+    const entryIndex = sectionLessons.findIndex((lesson) => lesson.id === lessonId);
+    const locked = sectionLessons.slice(0, entryIndex).some((previous) => !states[previous.id]?.completed);
+    if (locked) {
+      toast(currentLang === 'ar'
+        ? 'أكمل الدروس السابقة بالترتيب لفتح هذا الدرس'
+        : 'Complete the previous lessons in order to unlock this lesson', 3200);
+      navigate('section', [entry.section]);
+      return;
+    }
+  }
   await renderLessonPlayer(view, lessonId, {});
 }
 
@@ -610,16 +925,26 @@ async function viewProgress(view) {
 const viewStats = viewProgress;
 
 /* ============================================================
-   Settings view
+   Achievements view (v8) — computed from real progress only
    ============================================================ */
 
-async function viewSettings(view) {
+async function viewAchievements(view) {
   loading(view);
-  docTitle('navSettings');
+  docTitle('achTitle');
+  await renderAchievementsView(view);
+}
+
+/* ============================================================
+   More hub (secondary settings, organized) + Profile
+   ============================================================ */
+
+async function viewMore(view) {
+  loading(view);
+  docTitle('navMore');
   const L = currentLang;
   const s = getSettings();
 
-  const langSel = el('select', { 'aria-label': t(L, 'interfaceLanguage') }, [
+  const langSel = el('select', { class: 'select-pill', 'aria-label': t(L, 'interfaceLanguage') }, [
     el('option', { value: 'en', text: t(L, 'langEn'), selected: s.lang === 'en' ? '' : null }),
     el('option', { value: 'ar', text: t(L, 'langAr'), selected: s.lang === 'ar' ? '' : null }),
   ]);
@@ -631,23 +956,27 @@ async function viewSettings(view) {
     onChangeRerun();
   });
 
-  const themeSel = el('select', { 'aria-label': t(L, 'theme') }, ['light', 'dark', 'system'].map((th) =>
+  const themeSel = el('select', { class: 'select-pill', 'aria-label': t(L, 'theme') }, ['light', 'dark', 'system'].map((th) =>
     el('option', { value: th, text: t(L, `theme${th[0].toUpperCase()}${th.slice(1)}`), selected: s.theme === th ? '' : null })));
   themeSel.addEventListener('change', () => { saveSettings({ theme: themeSel.value }); applyDocumentSettings(); });
+
+  const fontScaleSel = el('select', { class: 'select-pill', 'aria-label': t(L, 'fontSize') }, [
+    el('option', { value: '0.9', text: t(L, 'fontSmall'), selected: s.fontScale <= 0.9 ? '' : null }),
+    el('option', { value: '1', text: t(L, 'fontNormal'), selected: s.fontScale > 0.9 && s.fontScale < 1.05 ? '' : null }),
+    el('option', { value: '1.1', text: t(L, 'fontLarge'), selected: s.fontScale >= 1.05 && s.fontScale < 1.15 ? '' : null }),
+    el('option', { value: '1.2', text: t(L, 'fontExtraLarge'), selected: s.fontScale >= 1.15 ? '' : null }),
+  ]);
+  fontScaleSel.addEventListener('change', () => {
+    saveSettings({ fontScale: parseFloat(fontScaleSel.value) });
+    applyDocumentSettings();
+    toast(t(L, 'dataSaved'));
+  });
 
   const goalInput = el('input', { type: 'number', min: '5', max: '200', value: String(s.dailyGoal), style: { maxWidth: '110px' }, 'aria-label': t(L, 'dailyGoalSetting') });
   goalInput.addEventListener('change', () => { saveSettings({ dailyGoal: parseInt(goalInput.value, 10) || 20 }); toast(t(L, 'dataSaved')); });
 
-  const nameInput = el('input', { type: 'text', maxlength: '24', value: s.userName || '', placeholder: t(L, 'namePlaceholder'), 'aria-label': t(L, 'yourName') });
-  nameInput.addEventListener('change', () => {
-    saveSettings({ userName: nameInput.value });
-    toast(t(L, 'dataSaved'));
-    renderShell(); // refresh avatar initial immediately
-  });
-
   const arabicToggle = toggle(s.showArabic, (on) => saveSettings({ showArabic: on }));
   const strictToggle = toggle(s.strictGrading, (on) => saveSettings({ strictGrading: on }));
-  const keyboardToggle = toggle(s.onScreenKeyboard, (on) => saveSettings({ onScreenKeyboard: on }));
   const soundFxToggle = toggle(s.soundEffects !== false, (on) => saveSettings({ soundEffects: on }));
 
   const rateSel = el('select', { 'aria-label': t(L, 'speechRate') }, [
@@ -701,7 +1030,10 @@ async function viewSettings(view) {
   });
 
   const clearBtn = el('button', { class: 'btn btn-danger', onclick: async () => {
-    if (typeof confirm !== 'undefined' && !confirm(t(L, 'clearConfirm'))) return;
+    if (typeof confirm !== 'undefined') {
+      if (!confirm(t(L, 'clearConfirm'))) return;
+      if (!confirm(t(L, 'clearConfirmAgain'))) return;
+    }
     await clearAllProgress();
     toast(t(L, 'dataSaved'));
     setTimeout(() => onChangeRerun(), 500);
@@ -724,37 +1056,164 @@ async function viewSettings(view) {
     toast(t(L, 'offlineReady'));
   } }, [iconLabel('package', t(L, 'prepareOffline'))]);
 
+  // ---- profile summary (real data; falls back to a friendly invite, never a placeholder) ----
+  const displayName = (s.userName || '').trim();
+  const profileCard = el('a', { class: 'card profile-card', href: '#/profile' }, [
+    el('span', { class: 'avatar-lg', 'aria-hidden': 'true' },
+      displayName ? [el('span', { text: displayName.charAt(0).toUpperCase() })] : [icon('user')]),
+    el('div', { class: 'grow' }, [
+      el('strong', { text: displayName || t(L, 'profileTitle') }),
+      el('span', { class: 'muted small', text: displayName ? t(L, 'moreGroupProfile') : t(L, 'namePlaceholder') }),
+    ]),
+    icon('arrowRight'),
+  ]);
+
+  // ---- real-screen shortcuts (colored existing PNG assets) ----
+  const shortcuts = el('div', { class: 'more-shortcuts' }, [
+    el('a', { class: 'shortcut-card', href: '#/review' }, [
+      el('span', { class: 'shortcut-icon' }, [pngIcon('reviewPng')]),
+      el('span', { text: t(L, 'navReview') }),
+      icon('arrowRight'),
+    ]),
+    el('a', { class: 'shortcut-card', href: '#/progress' }, [
+      el('span', { class: 'shortcut-icon' }, [pngIcon('statsPng')]),
+      el('span', { text: t(L, 'navProgress') }),
+      icon('arrowRight'),
+    ]),
+  ]);
+
+  const prefsContent = el('div', { class: 'more-section-content more-list' }, [
+    moreRow(pngIcon('languagePng'), t(L, 'interfaceLanguage'), langSel),
+    moreRow(icon('theme'), t(L, 'theme'), themeSel),
+    moreRow(icon('type'), t(L, 'fontSize'), fontScaleSel),
+  ]);
+
+  const trainingContent = el('div', { class: 'more-section-content more-list' }, [
+    settingRow(t(L, 'dailyGoalSetting'), null, goalInput),
+    settingRow(t(L, 'showArabic'), null, arabicToggle),
+    settingRow(t(L, 'strictGrading'), null, strictToggle),
+    settingRow(t(L, 'soundEffects'), null, soundFxToggle),
+    shortcuts,
+  ]);
+
+  // Upgraded speech settings (Section 20 audio system) — accent, voice,
+  // speed, volume, auto-repeat, playback controls and speaking practice.
+  const speechContent = await renderAudioSettingsPanel({
+    L, s, t, el, toast, icon, iconLabel, toggle, settingRow, saveSettings, rateSel,
+  });
+
+  const backupContent = el('div', { class: 'more-section-content more-list' }, [
+    settingRow(t(L, 'backupSection'), null, el('div', { class: 'row' }, [exportBtn, importBtn, importInput])),
+    el('p', { class: 'small muted more-note', text: t(L, 'offlineNote') }),
+    el('p', { class: 'small muted more-note', text: t(L, 'importWarn') }),
+    settingRow(t(L, 'offlineSection'), null, offlineBtn),
+  ]);
+
+  const aboutContent = el('div', { class: 'more-section-content more-list' }, [
+    el('p', { class: 'small muted more-note', text: t(L, 'aboutText') }),
+    el('div', { class: 'row-between small more-about-meta' }, [
+      el('span', { class: 'chip', text: `${t(L, 'versionLabel')} ${APP_VERSION}` }),
+    ]),
+    el('p', { class: 'small more-note', text: t(L, 'designedBy') }),
+    el('a', {
+      class: 'small more-note',
+      href: 'https://wa.me/20' + '1066227553',
+      target: '_blank',
+      rel: 'noopener noreferrer',
+      text: `${t(L, 'whatsappContact')}: 01066227553`,
+      'aria-label': `${t(L, 'whatsappContact')} 01066227553`,
+    }),
+  ]);
+
   view.replaceChildren(
-    el('h2', {}, [iconLabel('settings', t(L, 'settingsTitle'))]),
-    el('div', { class: 'card mt' }, [
-      settingRow(t(L, 'yourName'), null, nameInput),
-      settingRow(t(L, 'interfaceLanguage'), null, langSel),
-      settingRow(t(L, 'theme'), null, themeSel),
-      settingRow(t(L, 'dailyGoalSetting'), null, goalInput),
-      settingRow(t(L, 'showArabic'), null, arabicToggle),
-      settingRow(t(L, 'strictGrading'), null, strictToggle),
-      settingRow(t(L, 'onScreenKeyboard'), null, keyboardToggle),
-      settingRow(t(L, 'soundEffects'), null, soundFxToggle),
+    el('div', { class: 'page-head' }, [
+      el('h2', { text: t(L, 'moreTitle') }),
+      el('p', { text: t(L, 'moreIntro') }),
     ]),
-    el('div', { class: 'card' }, [
-      el('h3', { class: 'card-title' }, [iconLabel('audio', t(L, 'speechSection'))]),
-      settingRow(t(L, 'voice'), null, voiceSel),
-      settingRow(t(L, 'speechRate'), null, el('div', { class: 'row' }, [rateSel, testVoiceBtn])),
-      el('p', { class: 'small muted', text: t(L, 'speechNote') }),
+    profileCard,
+    moreSection(t(L, 'moreGroupPrefs'), 'theme', prefsContent, true),
+    moreSection(t(L, 'moreGroupLearning'), 'bulb', trainingContent, true),
+    moreSection(t(L, 'speechSection'), 'audio', speechContent),
+    moreSection(t(L, 'backupSection'), 'package', backupContent),
+    moreSection(t(L, 'aboutTitle'), 'info', aboutContent),
+    moreSection(t(L, 'dangerZone'), 'alert', el('div', { class: 'more-section-content more-danger' }, [clearBtn])),
+  );
+}
+
+/* PNG icon helper (existing colored assets under assets/icons) */
+function pngIcon(name) {
+  return icon(name);
+}
+
+/* Compact, accessible accordion groups for the More page. */
+function moreSection(label, iconName, content, open = false) {
+  return el('details', { class: 'card more-section', open: open ? true : null }, [
+    el('summary', { class: 'more-section-summary' }, [
+      el('span', { class: 'more-section-heading' }, [icon(iconName), el('span', { text: label })]),
+      icon('arrowRight'),
     ]),
-    el('div', { class: 'card' }, [
-      el('h3', { class: 'card-title' }, [iconLabel('package', t(L, 'offlineSection'))]),
-      el('div', { class: 'row' }, [offlineBtn]),
-      el('p', { class: 'small muted', text: t(L, 'offlineNote') }),
+    content,
+  ]);
+}
+
+/* More-screen list row: leading icon tile + label + trailing control */
+function moreRow(iconEl, label, control) {
+  return el('div', { class: 'more-row' }, [
+    el('span', { class: 'more-icon', 'aria-hidden': 'true' }, [iconEl]),
+    el('span', { class: 'more-label', text: label }),
+    control,
+  ]);
+}
+
+/* ============================================================
+   Profile view
+   ============================================================ */
+
+async function viewProfile(view) {
+  loading(view);
+  docTitle('profileTitle');
+  const L = currentLang;
+  const s = getSettings();
+  const [overview, totalXp] = await Promise.all([getOverview(), getTotalXp()]);
+
+  const nameInput = el('input', {
+    type: 'text', maxlength: '24', value: s.userName || '',
+    placeholder: t(L, 'namePlaceholder'), 'aria-label': t(L, 'displayName'),
+    class: 'profile-name-input', autocomplete: 'name', spellcheck: 'false',
+  });
+
+  const preview = el('p', { class: 'profile-greeting-preview muted', dir: 'auto' });
+  const avatar = el('span', { class: 'avatar-lg avatar-xl', 'aria-hidden': 'true' });
+  const renderPreview = () => {
+    const name = nameInput.value.trim();
+    preview.textContent = name ? t(L, 'welcomeGreeting', { name }) : t(L, 'welcomeGreetingNoName');
+    avatar.replaceChildren(...(name
+      ? [el('span', { text: name.charAt(0).toUpperCase() })]
+      : [icon('user')]));
+  };
+  renderPreview();
+  nameInput.addEventListener('input', renderPreview);
+  nameInput.addEventListener('change', () => {
+    saveSettings({ userName: nameInput.value });
+    toast(t(L, 'dataSaved'));
+    renderShell(); // keep header/state consistent
+  });
+
+  view.replaceChildren(
+    el('div', { class: 'breadcrumb' }, [el('a', { href: '#/more', text: t(L, 'navMore') }), ' › ', el('span', { text: t(L, 'profileTitle') })]),
+    el('div', { class: 'card profile-hero' }, [
+      avatar,
+      el('h2', { text: t(L, 'profileTitle'), style: { margin: '.7rem 0 .1rem' } }),
+      el('p', { class: 'small muted', style: { margin: '0 0 1rem', maxWidth: '46ch' }, text: t(L, 'profileIntro') }),
+      nameInput,
+      preview,
     ]),
-    el('div', { class: 'card' }, [
-      el('h3', { class: 'card-title' }, [iconLabel('download', t(L, 'backupSection'))]),
-      el('div', { class: 'row' }, [exportBtn, importBtn, importInput]),
-      el('p', { class: 'small muted', text: t(L, 'importWarn') }),
-    ]),
-    el('div', { class: 'card' }, [
-      el('h3', { class: 'card-title' }, [iconLabel('alert', t(L, 'dangerZone'))]),
-      clearBtn,
+    el('div', { class: 'stat-grid mb' }, [
+      statCard(formatNumber(overview.completedLessons), t(L, 'completedLessons'), 'books'),
+      statCard(formatNumber(overview.totalAnswers), t(L, 'practicedSentences'), 'pen'),
+      statCard(`${overview.accuracy}%`, t(L, 'accuracy'), 'target'),
+      statCard(formatNumber(overview.streak), t(L, 'streakDays'), 'flame'),
+      statCard(formatNumber(totalXp), t(L, 'xpTotal'), 'sparkle'),
     ]),
   );
 }

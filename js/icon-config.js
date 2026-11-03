@@ -18,6 +18,7 @@ export const ICONS = {
   book: { type: 'svg', src: './assets/icons/icons.svg#book' },
   headphones: { type: 'svg', src: './assets/icons/icons.svg#headphones' },
   play: { type: 'svg', src: './assets/icons/icons.svg#play' },
+  lock: { type: 'svg', src: './assets/icons/icons.svg#lock' },
   check: { type: 'svg', src: './assets/icons/icons.svg#check' },
   leaf: { type: 'svg', src: './assets/icons/icons.svg#leaf' },
   chart: { type: 'svg', src: './assets/icons/icons.svg#chart' },
@@ -50,4 +51,13 @@ export const ICONS = {
   calendar: { type: 'svg', src: './assets/icons/icons.svg#calendar' },
   sparkle: { type: 'svg', src: './assets/icons/icons.svg#sparkle' },
   grid: { type: 'svg', src: './assets/icons/icons.svg#grid' },
+  more: { type: 'svg', src: './assets/icons/icons.svg#more' },
+  info: { type: 'svg', src: './assets/icons/icons.svg#info' },
+  search: { type: 'svg', src: './assets/icons/icons.svg#search' },
+  sliders: { type: 'svg', src: './assets/icons/icons.svg#sliders' },
+  /* pre-rendered colored assets shipped in assets/icons (More-screen shortcuts) */
+  languagePng: { type: 'png', src: './assets/icons/language.png' },
+  settingsPng: { type: 'png', src: './assets/icons/settings.png' },
+  reviewPng: { type: 'png', src: './assets/icons/review.png' },
+  statsPng: { type: 'png', src: './assets/icons/stats.png' },
 };

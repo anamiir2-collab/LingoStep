@@ -7,7 +7,11 @@
    Pure module: no DOM, no browser APIs.
    ============================================================ */
 
-export const SECTIONS = ['basics', 'tenses', 'grammar', 'conversations', 'practical-scenarios', 'vocabulary', 'listening-writing'];
+export const SECTIONS = [
+  'foundations', 'daily-life', 'home-family', 'food-services', 'travel',
+  'health-emergency', 'social-communication', 'work-money',
+  'education-digital', 'complex-rights', 'specialized',
+];
 export const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1'];
 export const EX_TYPES = ['listen-and-type', 'fill-blank', 'word-order', 'multiple-choice'];
 

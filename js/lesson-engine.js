@@ -11,18 +11,17 @@ import { icon, iconLabel } from './icons.js';
 import { t } from './i18n.js';
 import { getSettings } from './settings.js';
 import { checkAnswer, wordDiff } from './grading.js';
-import { speak, stopSpeaking, isSupported as speechSupported } from './speech.js';
+import { speak, stopSpeaking, speakWordByWord, isSupported as speechSupported } from './speech.js';
 import { recordAttempt, updateLessonState, saveResume, getLessonState } from './progress.js';
 import { upsertOnWrong, gradeReview } from './review.js';
 import { navigate } from './router.js';
 import { getManifestEntry, nextLessonInSection, loadLesson } from './lesson-loader.js';
-import { attachKeyboard } from './keyboard.js';
+import { createTouchTypingField, createLetterTiles } from './touch-typing.js';
 import { awardExercise, awardLessonComplete, markFirstAttemptFailed, getTotalXp } from './xp.js';
 import { messageForCorrect, messageForWrong, messageForXp, messageForLessonComplete } from './motivation.js';
 import { analyzeSentence, renderWordCards } from './word-cards.js';
-import { attachCharacterCheck } from './listening-writing-enhancements.js';
-import { buildLetterSurface } from './letter-track.js';
 import { saveSettings } from './settings.js';
+import { playCorrectFanfare, playWrongBuzz, playFinishFanfare, confettiBurst } from './feedback-fx.js';
 
 const rank = { correct: 3, minor: 2, incorrect: 1, skipped: 0 };
 
@@ -84,6 +83,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
   const hintUsedSet = new Set();     // exerciseIds where a hint was opened
   let keyboardHandle = null;         // { destroy } for the on-screen keyboard
   let exerciseTimerId = null;
+  let swwUi = null;                  // active word-by-word playback handle
 
   // resume (normal lessons only)
   if (!reviewMode) {
@@ -134,16 +134,20 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
   function sectionLabel(sec, lang) {
     const names = {
       en: {
-        basics: 'Basics & Sentence Structure', tenses: 'English 16 Tenses Mastery',
-        grammar: 'Grammar, Questions & Negation', conversations: 'Daily English Conversations',
-        'practical-scenarios': 'Travel, Work & Practical Situations', vocabulary: 'Vocabulary & Expressions',
-        'listening-writing': 'Listening, Dictation & Writing',
+        foundations: 'Foundations & Core Communication', 'daily-life': 'Simple Daily Life',
+        'home-family': 'Home & Family', 'food-services': 'Food, Shopping & Services',
+        travel: 'Mobility & Travel', 'health-emergency': 'Health & Emergencies',
+        'social-communication': 'Relationships & Social Communication', 'work-money': 'Work & Money',
+        'education-digital': 'Education & Digital Skills', 'complex-rights': 'Complex Situations & Rights',
+        specialized: 'Specialized English & Leadership',
       },
       ar: {
-        basics: 'الأساسيات وبناء الجملة', tenses: 'إتقان الأزمنة الستة عشر',
-        grammar: 'القواعد والأسئلة والنفي', conversations: 'المحادثات اليومية',
-        'practical-scenarios': 'السفر والعمل والمواقف العملية', vocabulary: 'المفردات والتعبيرات',
-        'listening-writing': 'الاستماع والإملاء والكتابة',
+        foundations: 'التأسيس والتواصل الأساسي', 'daily-life': 'الحياة اليومية البسيطة',
+        'home-family': 'المنزل والأسرة', 'food-services': 'الطعام والتسوق والخدمات',
+        travel: 'التنقل والسفر', 'health-emergency': 'الصحة والطوارئ',
+        'social-communication': 'العلاقات والتواصل الاجتماعي', 'work-money': 'العمل والمال',
+        'education-digital': 'التعليم والمهارات الرقمية', 'complex-rights': 'المواقف المعقدة والحقوق',
+        specialized: 'التخصصات والقيادة',
       },
     };
     return names[lang][sec] || sec;
@@ -151,6 +155,8 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
 
   async function confirmExit() {
     stopSpeaking();
+    stopWordByWordUi();
+    dismissDuoSheet();
     if (reviewMode) { navigate('review'); return; }
     if (typeof confirm !== 'undefined' && !confirm(t(L, 'confirmExit'))) return;
     navigate('section', [lesson.section]);
@@ -162,6 +168,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     checked = false;
     lastResult = null;
     exStart = Date.now();
+    stopWordByWordUi();
     if (keyboardHandle) { try { keyboardHandle.destroy(); } catch { /* ignore */ } keyboardHandle = null; }
     renderHead();
     body.replaceChildren();
@@ -241,7 +248,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       card.append(el('div', { class: 'prompt-label', text: t(L, 'typeWhatYouHear') }));
       const audioRow = el('div', { class: 'audio-row' });
       const listenBtn = el('button', { class: 'audio-main', 'aria-label': t(L, 'play'), title: t(L, 'play'), onclick: () => playAudio(ex.en) }, [icon('audio')]);
-      const slowBtn = el('button', { class: 'audio-slow', 'aria-label': t(L, 'playSlow'), title: t(L, 'playSlow'), onclick: () => playAudio(ex.en, 0.65) }, [icon('turtle')]);
+      const slowBtn = el('button', { class: 'audio-slow', 'aria-label': t(L, 'playSlow'), title: t(L, 'playSlow'), onclick: () => playSlowWordByWord(ex.en, slowBtn) }, [icon('turtle')]);
       audioRow.append(listenBtn, slowBtn);
       // mute toggle for the typing sound effects (correct / wrong tones)
       const fxLabel = (on) => t(L, on ? 'soundFxOn' : 'soundFxOff');
@@ -267,56 +274,42 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       } else {
         audioRow.append(el('span', { class: 'audio-caption', text: `${t(L, 'play')} · ${t(L, 'playSlow')}` }));
         card.append(audioRow);
+        // word-by-word progress dots light up while the turtle button reads
+        card.append(el('div', { class: 'sww-dots', 'aria-hidden': 'true' }));
         setTimeout(() => playAudio(ex.en), 250); // auto-play once per exercise
       }
       if (settings.showArabic && ex.ar) {
         card.append(el('div', { class: 'sentence-ar', dir: 'rtl', text: ex.ar }));
       }
-      // YouType-style letter slots backed by ONE real input element:
-      // phone keyboards, backspace, space and paste all edit that input
-      // and the slots mirror it (see js/letter-track.js).
-      const surfaceApi = buildLetterSurface(ex.en, { ariaLabel: t(L, 'typeWhatYouHear') });
-      const typingSurface = surfaceApi.surface;
-      const input = surfaceApi.input;
-      const renderLetterTrack = () => surfaceApi.render(input.value);
-      inputRow.classList.add('lw-answer-row');
-      inputRow.append(typingSurface);
-      input.addEventListener('input', renderLetterTrack);
-      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); checked ? onNext() : onCheck(); } });
-      const charCheck = attachCharacterCheck(input, ex.en, {
-        onCorrect: renderLetterTrack,
-        onWrong: () => {
-          renderLetterTrack();
-          typingSurface.classList.remove('lw-shake');
-          void typingSurface.offsetWidth; // restart the shake animation
-          typingSurface.classList.add('lw-shake');
-        },
+      // v8 KEYBOARD-FREE dictation surface: letter slots driven by a
+      // touch keyboard and a JS string buffer. There is NO <input>
+      // element anywhere, so the Android/iOS system keyboard can never
+      // appear. Same slot rendering, same validation policy, same
+      // answers and grading (checkAnswer on the built value).
+      const typedField = createTouchTypingField({
+        expected: ex.en,
+        ariaLabel: t(L, 'typeWhatYouHear'),
+        labels: { backspace: t(L, 'kbBackspace'), space: t(L, 'kbSpace') },
+        onWrong: () => {},
+        onEnter: () => { checked ? onNext() : onCheck(); },
         onComplete: () => {
-          // sentence fully typed → success state, then hand over to the
-          // normal check pipeline (grading, XP, feedback, word cards)
-          renderLetterTrack();
-          typingSurface.classList.add('is-complete');
+          // sentence fully entered → success state, then hand over to
+          // the normal check pipeline (grading, XP, feedback, word cards)
+          typedField.surface.classList.add('is-complete');
           const at = idx;
           window.setTimeout(() => {
-            if (!checked && idx === at && state.input === input) onCheck();
+            if (!checked && idx === at) onCheck();
           }, 620);
         },
       });
-      renderLetterTrack();
+      inputRow.classList.add('lw-answer-row');
+      inputRow.append(typedField.root);
       const kbMount = el('div', { class: 'kb-mount' });
       card.append(inputRow, kbMount);
-      const kbHandle = attachKeyboard(input, kbMount, settings.onScreenKeyboard, {
-        clear: t(L, 'resetWordOrder'), enter: t(L, 'checkAnswer'),
-      });
-      keyboardHandle = {
-        destroy() {
-          try { kbHandle.destroy(); } catch { /* ignore */ }
-          try { charCheck.destroy(); } catch { /* ignore */ }
-          try { surfaceApi.destroy(); } catch { /* ignore */ }
-        },
-      };
+      keyboardHandle = { destroy() { try { typedField.destroy(); } catch { /* ignore */ } } };
       actions.append(checkBtn, hintBtn, skipBtn);
       card.append(actions);
+      state.typedField = typedField;
       const footerControls = el('div', { class: 'lw-footer-controls' });
       const restartBtn = el('button', {
         class: 'btn btn-ghost btn-sm',
@@ -337,26 +330,25 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       footerControls.append(restartBtn, replayBtn, footerNext);
       card.append(footerControls);
       state.footerNext = footerNext;
-      setTimeout(() => input.focus(), 120);
-      state.input = input;
     }
 
     if (ex.type === 'fill-blank') {
       card.append(el('div', { class: 'prompt-label', text: t(L, 'fillPrompt') }));
       card.append(el('div', { class: 'blank-display', dir: 'ltr', html: trustedBlankHtml(ex.display) }));
       if (settings.showArabic && ex.ar) card.append(el('div', { class: 'sentence-ar', dir: 'rtl', text: ex.ar }));
-      const input = el('input', { type: 'text', dir: 'ltr', 'data-latin': 'true', autocomplete: 'off', spellcheck: 'false', 'aria-label': t(L, 'fillPrompt'), placeholder: '…' });
-      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); checked ? onNext() : onCheck(); } });
-      inputRow.append(input);
-      const kbMount2 = el('div', { class: 'kb-mount' });
-      card.append(inputRow, kbMount2);
-      keyboardHandle = attachKeyboard(input, kbMount2, settings.onScreenKeyboard, {
-        clear: t(L, 'resetWordOrder'), enter: t(L, 'checkAnswer'),
+      // v8 KEYBOARD-FREE fill-blank: letter tiles of the blank word
+      // (words for multi-word blanks). Same question, same accepted
+      // answers, same checkAnswer validation — zero typing.
+      const tiles = createLetterTiles({
+        source: ex.blankWord,
+        ariaLabel: t(L, 'fillPrompt'),
+        labels: { backspace: t(L, 'kbBackspace'), clear: t(L, 'kbClear') },
       });
+      inputRow.append(tiles.root);
+      card.append(inputRow);
       actions.append(checkBtn, hintBtn, skipBtn);
       card.append(actions);
-      setTimeout(() => input.focus(), 120);
-      state.input = input;
+      state.tiles = tiles;
     }
 
     if (ex.type === 'word-order') {
@@ -421,9 +413,6 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     card.append(feedbackBox);
     body.append(card);
 
-    body.append(el('p', { class: 'muted small center', style: { marginTop: '.7rem' } }, [
-      el('kbd', { text: '⏎' }), ` = ${t(L, 'checkAnswer')} / ${t(L, 'nextExercise')}`,
-    ]));
     if (!reviewMode && entry && !retryMode) {
       // keep resume position fresh (retry subsets must not corrupt it)
       saveResume(lessonId, idx);
@@ -447,12 +436,47 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
   }
 
   function playAudio(text, rateOverride) {
+    stopWordByWordUi();
     const ok = speak(text, {
       voiceURI: settings.voiceURI || '',
       rate: rateOverride ?? settings.rate,
       onerror: () => toast(t(L, 'speechUnavailable')),
     });
     if (!ok) toast(t(L, 'speechUnavailable'));
+  }
+
+  /** Clear any word-by-word playback + its dots/pulse UI. */
+  function stopWordByWordUi() {
+    if (swwUi) { try { swwUi.stop(); } catch { /* ignore */ } swwUi = null; }
+    if (!body || !body.querySelectorAll) return;
+    body.querySelectorAll('.sww-dots.is-active').forEach((d) => {
+      d.classList.remove('is-active');
+      d.replaceChildren();
+    });
+    body.querySelectorAll('.audio-slow.is-speaking').forEach((b) => b.classList.remove('is-speaking')); 
+  }
+
+  /** Turtle button: word-by-word slow audio (falls back to slow sentence). */
+  function playSlowWordByWord(text, btn) {
+    stopWordByWordUi();
+    if (getSettings().slowWordByWord === false || !speechSupported()) {
+      playAudio(text, 0.65);
+      return;
+    }
+    const dotsWrap = body.querySelector('.sww-dots');
+    const words = String(text).trim().split(/\s+/).filter(Boolean);
+    const dots = dotsWrap
+      ? words.map(() => { const d = el('span', { class: 'sww-dot' }); dotsWrap.append(d); return d; })
+      : [];
+    if (dotsWrap) dotsWrap.classList.add('is-active');
+    if (btn) btn.classList.add('is-speaking');
+    swwUi = speakWordByWord(text, {
+      voiceURI: settings.voiceURI || '',
+      rate: 0.6,
+      gapMs: 300,
+      onword: (i) => { dots[i]?.classList.add('lit'); },
+      onend: () => stopWordByWordUi(),
+    });
   }
 
   function showHint(ex) {
@@ -476,18 +500,20 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     let typedVal = '';
 
     if (ex.type === 'listen-and-type') {
-      const val = state.input?.value ?? '';
+      const val = state.typedField ? state.typedField.getValue() : '';
       typedVal = val;
       result = checkAnswer(val, ex.acceptedAnswers, { strict: settings.strictGrading });
-      if (result.status === 'empty') { toast(t(L, 'emptyAnswer')); state.input?.classList.add('invalid'); return; }
-      state.input?.classList.remove('invalid');
+      if (result.status === 'empty') {
+        toast(t(L, 'emptyAnswer'));
+        if (state.typedField) state.typedField.shake();
+        return;
+      }
     } else if (ex.type === 'fill-blank') {
-      const val = state.input?.value ?? '';
+      const val = state.tiles ? state.tiles.getValue() : '';
       typedVal = val;
       const base = checkAnswer(val, ex.acceptedAnswers, { strict: settings.strictGrading });
       result = { ...base, expectedDisplay: ex.blankWord };
-      if (result.status === 'empty') { toast(t(L, 'emptyAnswer')); state.input?.classList.add('invalid'); return; }
-      state.input?.classList.remove('invalid');
+      if (result.status === 'empty') { toast(t(L, 'emptyAnswer')); return; }
     } else if (ex.type === 'word-order') {
       const built = state.getWordOrder ? state.getWordOrder() : '';
       if (!state.wordOrderComplete || !state.wordOrderComplete()) {
@@ -546,6 +572,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     fb.append(el('div', { class: 'motivation-line', dir: 'rtl', text: mMsg }));
 
     // XP awarding (normal lessons only — revision sessions never award XP)
+    let xpDelta = 0;
     if (!reviewMode) {
       try {
         const firstAttempt = firstAttemptMap.get(ex.id) !== false;
@@ -555,6 +582,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
           const award = await awardExercise(ex.id, result.status, { firstAttempt, usedHint: hintUsedSet.has(ex.id) });
           if (award.delta > 0) {
             sessionXp += award.delta;
+            xpDelta = award.delta;
             fb.append(el('span', { class: 'xp-gain', text: t(L, 'plusXp', { n: award.delta }) }));
             const xpMsg = messageForXp(settings.userName, lastMotivation);
             lastMotivation = xpMsg;
@@ -603,7 +631,89 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     if (state.skipBtn) state.skipBtn.disabled = true;
     const nextBtn = el('button', { class: 'btn btn-primary', onclick: onNext }, [iconLabel(idx === exercises.length - 1 ? 'trophy' : 'arrowRight', idx === exercises.length - 1 ? t(L, 'finishLesson') : t(L, 'nextExercise'))]);
     state.checkBtn.replaceWith(nextBtn);
-    nextBtn.focus();
+    nextBtn.focus(); // safe: buttons never open a system keyboard
+
+    // Duolingo-style instant celebration (sound + confetti + bottom sheet)
+    celebrate(result, ex, xpDelta);
+  }
+
+  /* ---------- celebration + interactive feedback sheet ---------- */
+
+  function celebrate(result, ex, xpDelta) {
+    if (result.status === 'correct') { playCorrectFanfare(); confettiBurst(26); }
+    else if (result.status === 'minor') { playCorrectFanfare(); }
+    else { playWrongBuzz(); }
+
+    // combo badge for 3+ correct answers in a row (all exercise types)
+    let combo = 0;
+    for (let i = idx; i >= 0 && results[i]?.status === 'correct'; i--) combo++;
+    if (combo >= 3) showComboBadge(combo);
+
+    showDuoSheet(result, ex, xpDelta);
+  }
+
+  function showComboBadge(n) {
+    document.querySelectorAll('.combo-badge').forEach((b) => b.remove());
+    const badge = el('div', { class: 'combo-badge', role: 'status', 'aria-label': `${t(L, 'comboAria')} ×${n}` }, [
+      icon('flame'),
+      el('span', { text: `×${n}` }),
+    ]);
+    document.body.append(badge);
+    setTimeout(() => badge.remove(), 2200);
+  }
+
+  function showDuoSheet(result, ex, xpDelta) {
+    dismissDuoSheet();
+    const ok = result.status === 'correct';
+    const good = ok || result.status === 'minor';
+    const backdrop = el('div', { class: 'duo-backdrop' });
+    backdrop.addEventListener('click', dismissDuoSheet);
+
+    const title = ok ? t(L, 'duoExcellent') : (result.status === 'minor' ? t(L, 'duoGoodJob') : t(L, 'duoKeepGoing'));
+    const sheet = el('div', { class: 'duo-sheet', role: 'status' }, [
+      el('div', { class: 'duo-sheet-icon' }, [icon(good ? 'checkCircle' : 'xCircle')]),
+      el('div', { class: 'duo-sheet-title', text: title }),
+    ]);
+
+    if (!ok) {
+      // expected answer per exercise type (multiple-choice has no `en` field)
+      let expected = null;
+      if (ex.type === 'fill-blank' && result.expectedDisplay) expected = ex.display.replace('___', ex.blankWord);
+      else if (ex.type === 'multiple-choice') expected = Array.isArray(ex.options) ? ex.options[ex.answerIndex] : null;
+      else expected = ex.en || null;
+      if (expected || ex.ar) {
+        const answerBox = el('div', { class: 'duo-sheet-answer' });
+        if (expected) {
+          answerBox.append(
+            el('div', { class: 'duo-answer-label', text: t(L, 'duoCorrectAnswer') }),
+            el('div', { class: 'duo-answer-en', dir: 'ltr', text: expected }),
+          );
+        }
+        if (ex.ar) answerBox.append(el('div', { class: 'ar-meaning', dir: 'rtl', text: ex.ar }));
+        sheet.append(answerBox);
+      }
+    }
+
+    if (xpDelta > 0) sheet.append(el('span', { class: 'xp-float', text: t(L, 'plusXp', { n: xpDelta }) }));
+
+    const last = idx === exercises.length - 1;
+    const contBtn = el('button', {
+      class: 'btn btn-primary duo-continue',
+      onclick: () => { dismissDuoSheet(); onNext(); },
+    }, [iconLabel(last ? 'trophy' : 'arrowRight', last ? t(L, 'finishLesson') : t(L, 'continueBtn'))]);
+    sheet.append(contBtn);
+
+    const wrap = el('div', { class: `duo-sheet-wrap ${good ? 'is-ok' : 'is-bad'}` }, [sheet]);
+    document.body.append(backdrop, wrap);
+    requestAnimationFrame(() => {
+      backdrop.classList.add('is-open');
+      wrap.classList.add('is-open');
+    });
+    setTimeout(() => { try { contBtn.focus({ preventScroll: true }); } catch { contBtn.focus(); } }, 420);
+  }
+
+  function dismissDuoSheet() {
+    document.querySelectorAll('.duo-sheet-wrap, .duo-backdrop').forEach((n) => n.remove());
   }
 
   /** Word-level colored diff chips for dictation feedback. */
@@ -673,11 +783,17 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     persistAnswer(ex, 'skipped');
     if (state.resetBtn) state.resetBtn.disabled = true;
     if (state.hintBtn) state.hintBtn.disabled = true;
-    state.checkBtn.replaceWith(el('button', { class: 'btn btn-primary', onclick: onNext }, [iconLabel('arrowRight', t(L, 'nextExercise'))]));
+    const skipNext = el('button', { class: 'btn btn-primary', onclick: onNext }, [iconLabel('arrowRight', t(L, 'nextExercise'))]);
+    state.checkBtn.replaceWith(skipNext);
+    skipNext.focus();
+    // skipped answers get the same feedback sheet (red variant, no XP/sound sting)
+    showDuoSheet({ status: 'skipped' }, ex, 0);
   }
 
   function onNext() {
+    dismissDuoSheet();
     stopSpeaking();
+    stopWordByWordUi();
     if (idx < exercises.length - 1) {
       idx += 1;
       renderExercise();
@@ -690,6 +806,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
   // ---------- summary ----------
   async function renderSummary() {
     if (exerciseTimerId) { clearInterval(exerciseTimerId); exerciseTimerId = null; }
+    dismissDuoSheet();
     const attempted = results.filter(Boolean);
     const good = attempted.filter((r) => r.status === 'correct').length;
     const minor = attempted.filter((r) => r.status === 'minor').length;
@@ -736,7 +853,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     const doneTitle = reviewMode ? t(L, 'reviewSessionDone') : (retryMode ? t(L, 'retryDoneTitle') : t(L, 'lessonComplete'));
 
     body.append(el('div', { class: 'done-card center' }, [
-      el('div', { class: 'done-medal' }, [icon(acc >= 80 ? 'trophy' : 'flame')]),
+      el('div', { class: 'done-medal duo-medal-bounce' }, [icon(acc >= 80 ? 'trophy' : 'flame')]),
       el('h3', { text: doneTitle }),
       el('div', { class: 'motivation-line', dir: 'rtl', text: completeMsg }),
       el('div', { class: 'summary-score', text: `${acc}%` }),
@@ -756,6 +873,10 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       (!reviewMode && !retryMode && wrongs.length) ? el('p', { class: 'muted small', style: { marginTop: '.6rem' }, text: t(L, 'addedToReview') }) : null,
       el('div', { class: 'card-actions', style: { marginTop: '1.1rem' } }, buildSummaryButtons(wrongs)),
     ].filter(Boolean)));
+
+    // end-of-lesson celebration: fanfare + confetti (bigger for high scores)
+    playFinishFanfare();
+    confettiBurst(acc >= 80 ? 46 : 26);
 
     function formatXp(n) {
       return new Intl.NumberFormat(L === 'ar' ? 'ar-EG' : 'en-US').format(n);

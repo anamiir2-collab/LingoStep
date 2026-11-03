@@ -20,6 +20,7 @@
    ============================================================ */
 
 import { getSettings } from './settings.js';
+import { alignTyped } from './letter-track.js';
 
 /* ---------- shared audio ---------- */
 
@@ -91,6 +92,10 @@ function soundComplete() {
  * Attach strict prefix validation to a text input.
  * opts: { onCorrect(len), onWrong(goodIndex, wrongChar), onComplete() }
  * Returns { destroy }.
+ * Punctuation is optional (spec): a missing/extra . , ? ! : ; " mark
+ * never rejects a letter, never shakes and never blocks completion —
+ * see alignTyped() in letter-track.js. Apostrophes inside words
+ * (don't, I'm) and hyphens stay required.
  */
 export function attachCharacterCheck(input, target, opts = {}) {
   if (!input || typeof target !== 'string') return { destroy() {} };
@@ -100,15 +105,14 @@ export function attachCharacterCheck(input, target, opts = {}) {
 
   function onInput() {
     const value = input.value;
-    let good = 0;
-    while (good < value.length && good < expected.length &&
-      value[good].toLocaleLowerCase() === expected[good].toLocaleLowerCase()) {
-      good += 1;
-    }
-    if (good < value.length) {
+    const a = alignTyped(expected, value);
+    const hasUnmatched = a.typedUsed < value.length;
+
+    if (hasUnmatched && !a.complete) {
       // reject everything after the correct prefix, keep the prefix
-      input.value = value.slice(0, good);
-      try { input.setSelectionRange(good, good); } catch { /* no caret on some types */ }
+      // (the mismatch is a real letter — punctuation is auto-skipped)
+      input.value = value.slice(0, a.typedUsed);
+      try { input.setSelectionRange(a.typedUsed, a.typedUsed); } catch { /* no caret on some types */ }
       input.classList.remove('lw-character-wrong');
       // Restart the animation even when two errors happen quickly.
       void input.offsetWidth;
@@ -116,14 +120,27 @@ export function attachCharacterCheck(input, target, opts = {}) {
       window.clearTimeout(wrongTimer);
       wrongTimer = window.setTimeout(() => input.classList.remove('lw-character-wrong'), 420);
       soundWrong();
-      if (typeof opts.onWrong === 'function') opts.onWrong(good, value[good]);
+      if (typeof opts.onWrong === 'function') opts.onWrong(a.typedUsed, value[a.typedUsed]);
+      return;
+    }
+    if (a.extraBad) {
+      // real letters typed beyond a finished sentence → trim them
+      input.value = value.slice(0, a.typedUsed);
+      try { input.setSelectionRange(a.typedUsed, a.typedUsed); } catch { /* no caret on some types */ }
+      input.classList.remove('lw-character-wrong');
+      void input.offsetWidth;
+      input.classList.add('lw-character-wrong');
+      window.clearTimeout(wrongTimer);
+      wrongTimer = window.setTimeout(() => input.classList.remove('lw-character-wrong'), 420);
+      soundWrong();
+      if (typeof opts.onWrong === 'function') opts.onWrong(a.typedUsed, value[a.typedUsed]);
       return;
     }
     if (value.length > 0) {
       input.classList.add('lw-character-correct');
-      soundCorrect();
+      if (!a.complete) soundCorrect(); // mid-sentence tick
       if (typeof opts.onCorrect === 'function') opts.onCorrect(value.length);
-      if (!completed && value.length >= expected.length) {
+      if (!completed && a.complete) {
         completed = true;
         soundComplete();
         if (typeof opts.onComplete === 'function') opts.onComplete();

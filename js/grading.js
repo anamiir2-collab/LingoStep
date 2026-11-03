@@ -6,11 +6,23 @@
      'empty'     — nothing typed
      'correct'   — matches an accepted answer after core normalization
                    (case-insensitive, collapsed spaces, curly quotes)
-     'minor'     — matches only after lenient passes
-                   (trailing punctuation, or contraction expansion
-                    when strict grading is off)
-     'incorrect' — anything else (real grammar/spelling/punctuation
-                   differences are respected, never auto-forgiven)
+                   OR after stripping punctuation (see below)
+     'minor'     — matches only after contraction expansion
+                   (only when strict grading is off)
+     'incorrect' — anything else (real grammar/spelling differences
+                   are respected, never auto-forgiven)
+
+   PUNCTUATION POLICY (spec: the learner is never required to type
+   punctuation to pass a normal writing/dictation exercise):
+     - . , ? ! : ; quotes and brackets are ignored when comparing
+       the typed answer with the expected one — missing, extra or
+       different punctuation is still 'correct'.
+     - Apostrophes INSIDE a word (don't, I'm) are part of the word and
+       stay required — dropping one is a real spelling difference
+       (requirement 8). Quote-like apostrophes around words are
+       optional and ignored.
+     - Hyphens stay (compound words: twenty-one).
+     - The stored / displayed sentence is never modified.
 
    Contractions: "don't" and "do not" are considered DIFFERENT by
    default (strict). With strict grading off they compare as 'minor'.
@@ -31,6 +43,38 @@ export function normalizeCore(s) {
 /** Lenient pass 1: also drop trailing punctuation. */
 export function normalizeLenient(s) {
   return normalizeCore(s).replace(/[.!?;,:\u2026]+$/, '').replace(/\s+/g, ' ').trim();
+}
+
+/** Characters treated as punctuation that never decides correctness. */
+const PUNCT_RE = /[.,!?;:"()\[\]{}\u2026\u00A1\u00BF\u060C\u061B\u061F\u3001\u3002\uFF01\uFF0C\uFF1A\uFF1B\uFF1F]/;
+
+function isWordChar(c) {
+  return /[a-z0-9]/.test(c);
+}
+
+/**
+ * Punctuation-free comparison form: normalizeCore + every punctuation
+ * mark removed (including apostrophes; hyphens stay required).
+ * Used for comparison only — never to change stored or shown text.
+ */
+export function stripPunct(s) {
+  const src = normalizeCore(s);
+  let out = '';
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (c === "'") {
+      // Word-internal apostrophes (don't, I'm) are part of the word —
+      // dropping one is a real spelling difference (requirement 8).
+      // Quote-like apostrophes around words are optional punctuation.
+      const prev = i > 0 ? src[i - 1] : '';
+      const next = i + 1 < src.length ? src[i + 1] : '';
+      if (isWordChar(prev) && isWordChar(next)) { out += c; continue; }
+      continue;
+    }
+    if (PUNCT_RE.test(c)) { out += ' '; continue; }
+    out += c;
+  }
+  return out.replace(/\s+/g, ' ').trim();
 }
 
 /** Lenient pass 2 (only when strict grading is off): expand contractions. */
@@ -96,6 +140,7 @@ export function checkAnswer(userInput, acceptedAnswers, options = {}) {
   }
 
   const userCore = normalizeCore(userInput);
+  const userNoPunct = stripPunct(userInput);
   let best = null;
 
   for (const ans of accepted) {
@@ -109,14 +154,15 @@ export function checkAnswer(userInput, acceptedAnswers, options = {}) {
     let status = null;
     let usedAnswer = ans;
 
-    // lenient pass 1: trailing punctuation
-    if (normalizeLenient(userInput) === normalizeLenient(ans)) {
-      status = 'minor';
+    // punctuation pass: missing / extra / different punctuation marks
+    // never change the result (trailing, internal or both) → 'correct'
+    if (userNoPunct === stripPunct(ans)) {
+      status = 'correct';
     }
 
-    // lenient pass 2: contraction expansion (only when strict is off)
+    // lenient pass: contraction expansion (only when strict is off)
     if (!strict && status === null) {
-      if (expandContractions(normalizeLenient(userInput)) === expandContractions(normalizeLenient(ans))) {
+      if (expandContractions(userNoPunct) === expandContractions(stripPunct(ans))) {
         status = 'minor';
       }
     }
@@ -157,6 +203,11 @@ function pairScore(typed, expected) {
   return 0;
 }
 
+/** Normalize words for feedback alignment while preserving original display text. */
+function wordKey(word) {
+  return String(word ?? '').replace(/[\u0027\u2018\u2019\u02BC]/g, '');
+}
+
 /**
  * Word-level alignment between what the user typed and one expected
  * answer. Used ONLY for feedback visualization — the accept/reject
@@ -177,7 +228,7 @@ export function wordDiff(userInput, expected) {
   const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
-      dp[i][j] = u[i] === e[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      dp[i][j] = wordKey(u[i]) === wordKey(e[j]) ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
     }
   }
 
@@ -185,7 +236,7 @@ export function wordDiff(userInput, expected) {
   const expectedMatch = new Array(m).fill(false);
   let i = 0, j = 0;
   while (i < n && j < m) {
-    if (u[i] === e[j]) { typedMatch[i] = true; expectedMatch[j] = true; i++; j++; }
+    if (wordKey(u[i]) === wordKey(e[j])) { typedMatch[i] = true; expectedMatch[j] = true; i++; j++; }
     else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
     else j++;
   }
@@ -202,7 +253,7 @@ export function wordDiff(userInput, expected) {
     let best = -1, bestScore = 0;
     for (const b of unmatchedE) {
       if (usedE.has(b)) continue;
-      const s = pairScore(u[a], e[b]);
+      const s = pairScore(wordKey(u[a]), wordKey(e[b]));
       if (s > bestScore) { bestScore = s; best = b; }
     }
     if (best >= 0) { pairOf.set(a, best); usedE.add(best); }
