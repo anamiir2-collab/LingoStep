@@ -14,13 +14,17 @@ import { validateLessonStructure, normalizeForDup, SECTIONS } from '../js/lesson
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MIN = {
-  basics: { lessons: 12, sentences: 600 },
-  tenses: { lessons: 24, sentences: 1200 },
-  grammar: { lessons: 16, sentences: 800 },
-  conversations: { lessons: 20, sentences: 1000 },
-  'practical-scenarios': { lessons: 16, sentences: 800 },
-  vocabulary: { lessons: 16, sentences: 800 },
-  'listening-writing': { lessons: 16, sentences: 800 },
+  foundations: { lessons: 20, sentences: 1000 },
+  'daily-life': { lessons: 25, sentences: 1250 },
+  'home-family': { lessons: 25, sentences: 1250 },
+  'food-services': { lessons: 25, sentences: 1250 },
+  travel: { lessons: 25, sentences: 1250 },
+  'health-emergency': { lessons: 25, sentences: 1250 },
+  'social-communication': { lessons: 25, sentences: 1250 },
+  'work-money': { lessons: 25, sentences: 1250 },
+  'education-digital': { lessons: 25, sentences: 1250 },
+  'complex-rights': { lessons: 20, sentences: 1000 },
+  specialized: { lessons: 10, sentences: 500 },
 };
 
 const errors = [];
@@ -113,12 +117,12 @@ if (errors.length) {
   console.error(`FAILED with ${errors.length} error(s)`);
   process.exit(1);
 }
-if (totalLessons < 120) {
-  console.error(`FAILED: lessons ${totalLessons} < 120`);
+if (totalLessons < 250) {
+  console.error(`FAILED: lessons ${totalLessons} < 250`);
   process.exit(1);
 }
-if (totalSentences < 6000) {
-  console.error(`FAILED: unique practice sentences ${totalSentences} < 6000`);
+if (totalSentences < 11000) {
+  console.error(`FAILED: unique practice sentences ${totalSentences} < 11000`);
   process.exit(1);
 }
 console.log('PASSED');

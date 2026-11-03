@@ -28,20 +28,20 @@ export function run() {
 
   // manifest integrity for navigation
   const manifest = getManifest();
-  assert.ok(manifest.length >= 120);
+  assert.ok(manifest.length >= 250);
   for (const entry of manifest) {
     assert.ok(existsSync(join(ROOT, entry.path)), `file exists for ${entry.id}`);
   }
-  assert.equal(getManifestEntry('lesson-001').section, 'basics');
-  assert.equal(getManifestBySection('tenses').length, 24);
+  assert.equal(getManifestEntry('lesson-001').section, 'foundations');
+  assert.equal(getManifestBySection('daily-life').length, 25);
   assert.equal(nextLessonInSection('lesson-001'), 'lesson-002');
-  assert.equal(nextLessonInSection('lesson-012'), null, 'last lesson of basics has no next in its section');
-  assert.equal(nextLessonInSection('lesson-013'), 'lesson-014');
+  assert.equal(nextLessonInSection('lesson-020'), null, 'last lesson of foundations has no next in its section');
+  assert.equal(nextLessonInSection('lesson-021'), 'lesson-022');
   assert.equal(nextLessonInSection(getManifest()[getManifest().length - 1].id), null, 'last lesson has no next');
 
   // GitHub Pages path resolution: relative to js/ module location
-  const url = resolveAssetUrl('lessons/basics/lesson-001.js');
-  assert.ok(url.includes('/lessons/basics/lesson-001.js'), 'resolves under repo root');
+  const url = resolveAssetUrl('lessons/foundations/lesson-001.js');
+  assert.ok(url.includes('/lessons/foundations/lesson-001.js'), 'resolves under repo root');
   assert.ok(!url.startsWith('file:///lessons'), 'not rooted at filesystem root');
   // works under a sub-path simulation: js/ is inside ROOT, so resolved URL is ROOT + path
   assert.ok(url.startsWith('file://' + ROOT), 'stays inside project root regardless of host base');

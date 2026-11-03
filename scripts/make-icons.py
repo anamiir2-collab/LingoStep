@@ -1,60 +1,76 @@
 #!/usr/bin/env python3
-"""Generate LingoStep PWA icons (192, 512, maskable, favicon)."""
-from PIL import Image, ImageDraw, ImageFont
+"""Regenerate LingoStep PWA icons from the OFFICIAL logo.
+
+The canonical icon set (icons/icon-192.png, icon-512.png, maskable
+variants, favicon-64.png) ships in the repository and displays the real
+LingoStep logo (blue speech bubble + waveform + pencil). This script no
+longer draws a placeholder letter "L" — it derives every size from the
+official 512px logo so proportions, transparency and brand identity are
+preserved.
+
+Usage:
+    python3 scripts/make-icons.py                 # icons/icon-512.png is the source
+    python3 scripts/make-icons.py path/to/logo.png  # or an explicit source
+"""
+from PIL import Image
 import os
+import sys
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'icons')
 os.makedirs(OUT, exist_ok=True)
 
-PRIMARY = (14, 122, 95, 255)      # #0e7a5f
-PRIMARY_DEEP = (9, 63, 49, 255)   # #093f31
-WHITE = (255, 255, 255, 255)
+DEFAULT_SOURCE = os.path.join(OUT, 'icon-512.png')
 
-def rounded_rect_mask(size, radius):
-    m = Image.new('L', (size, size), 0)
-    d = ImageDraw.Draw(m)
-    d.rounded_rectangle([0, 0, size - 1, size - 1], radius=radius, fill=255)
-    return m
 
-def draw_icon(size, maskable=False):
-    img = Image.new('RGBA', (size, size), PRIMARY if maskable else (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    if not maskable:
-        # app tile
-        d.rounded_rectangle([0, 0, size - 1, size - 1], radius=int(size * 0.22), fill=PRIMARY)
-    # subtle gradient blob (decorative)
-    blob_r = int(size * 0.42)
-    d.ellipse([size - blob_r, -blob_r // 2, size + blob_r // 2, blob_r], fill=(255, 255, 255, 22))
-    # letter L
-    font = None
-    for candidate in [
-        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-        '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
-    ]:
-        if os.path.exists(candidate):
-            font = ImageFont.truetype(candidate, int(size * 0.62))
-            break
-    if font is None:
-        font = ImageFont.load_default()
-    text = 'L'
-    bbox = d.textbbox((0, 0), text, font=font)
-    w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    x = (size - w) / 2 - bbox[0]
-    y = (size - h) / 2 - bbox[1] - size * 0.02
-    d.text((x, y), text, font=font, fill=WHITE)
-    # small speech-dot accent
-    r = size * 0.055
-    cx, cy = size * 0.72, size * 0.72
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(56, 199, 155, 255))
+def load_source():
+    src_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_SOURCE
+    if not os.path.exists(src_path):
+        raise SystemExit(
+            f"Source logo not found: {src_path}\n"
+            "Provide the official LingoStep logo, e.g.:\n"
+            "  python3 scripts/make-icons.py /path/to/lingostep-logo.png"
+        )
+    img = Image.open(src_path).convert('RGBA')
+    if img.width != img.height:
+        side = max(img.width, img.height)
+        canvas = Image.new('RGBA', (side, side), (0, 0, 0, 0))
+        canvas.alpha_composite(img, ((side - img.width) // 2, (side - img.height) // 2))
+        img = canvas
     return img
 
-for size in (192, 512):
-    draw_icon(size).save(os.path.join(OUT, f'icon-{size}.png'))
-    # maskable: content within 80% safe zone on solid background
-    img = draw_icon(size, maskable=True)
-    inner = draw_icon(int(size * 0.8), maskable=False)
-    img.alpha_composite(inner, (int(size * 0.1), int(size * 0.1)))
-    img.save(os.path.join(OUT, f'icon-{size}-maskable.png'))
 
-draw_icon(64).save(os.path.join(OUT, 'favicon-64.png'))
-print('icons written to', OUT)
+def rounded(img, radius_ratio=0.22):
+    """Apply rounded-corner transparency like an app tile."""
+    size = img.width
+    mask = Image.new('L', (size, size), 0)
+    from PIL import ImageDraw
+    ImageDraw.Draw(mask).rounded_rectangle(
+        [0, 0, size - 1, size - 1], radius=int(size * radius_ratio), fill=255)
+    out = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    out.paste(img, (0, 0), mask)
+    return out
+
+
+def main():
+    src = load_source()
+
+    # standard "any" icons — official artwork, scaled down
+    for size in (192, 512):
+        src.resize((size, size), Image.LANCZOS).save(
+            os.path.join(OUT, f'icon-{size}.png'))
+
+    # maskable: full-bleed square, artwork inside the 80% safe zone
+    for size in (192, 512):
+        canvas = Image.new('RGBA', (size, size), (26, 92, 198, 255))  # brand blue
+        inner = int(size * 0.80)
+        art = src.resize((inner, inner), Image.LANCZOS)
+        canvas.alpha_composite(art, ((size - inner) // 2, (size - inner) // 2))
+        canvas.save(os.path.join(OUT, f'icon-{size}-maskable.png'))
+
+    # favicon
+    src.resize((64, 64), Image.LANCZOS).save(os.path.join(OUT, 'favicon-64.png'))
+    print('icons regenerated from official logo →', OUT)
+
+
+if __name__ == '__main__':
+    main()

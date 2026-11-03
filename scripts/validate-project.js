@@ -40,7 +40,7 @@ if (existsSync(sectionsDir)) {
     if (statSync(p).isDirectory()) lessonFileCount += readdirSync(p).filter((f) => f.endsWith('.js')).length;
   }
 }
-if (lessonFileCount < 120) errors.push(`lesson .js files on disk: ${lessonFileCount} < 120`);
+if (lessonFileCount < 250) errors.push(`lesson .js files on disk: ${lessonFileCount} < 250`);
 
 /* 2. PWA sanity */
 try {

@@ -1,19 +1,16 @@
 {
   "name": "lingostep",
-  "version": "1.0.0",
-  "description": "LingoStep — a free, offline-friendly English listening, typing, grammar and revision trainer with 120 lessons and 6,000+ practice sentences. Arabic/English interface.",
-  "type": "module",
+  "version": "8.0.0",
+  "description": "LingoStep — listen, build, and master English step by step. Keyboard-free touch learning PWA (plain HTML/CSS/JS ES modules) for GitHub Pages, Android and iOS via Capacitor.",
   "private": true,
+  "type": "module",
   "license": "MIT",
-  "engines": {
-    "node": ">=18.0.0"
-  },
   "scripts": {
     "start": "node scripts/serve.js",
+    "test": "node tests/run-all.js",
     "validate": "node scripts/validate-project.js",
     "validate:lessons": "node scripts/validate-lessons.js",
     "detect:duplicates": "node scripts/detect-duplicates.js",
-    "build:content": "node scripts/content/gen-all.js",
-    "test": "node tests/run-all.js"
+    "audio:check": "node scripts/apply-audio-upgrade.js --check"
   }
 }
