@@ -1,6 +1,11 @@
-/* ============================================================
-   LingoStep — responsive rules (mobile-first enhancements)
-   ============================================================ */
+/* =========================================================
+   Responsive layout rules only.
+   Theme tokens are defined centrally in style.css/themes.css.
+   ========================================================= */
+
+/* =========================================================
+   RESPONSIVE / LAYOUT
+   ========================================================= */
 
 /* small phones: tighten paddings */
 @media (max-width: 420px) {
@@ -52,6 +57,10 @@
   .brand span.brand-name { display: none; }
 }
 
+/* =========================================================
+   RTL + INPUT DIRECTION
+   ========================================================= */
+
 /* Arabic RTL fine-tuning */
 [dir="rtl"] body { letter-spacing: 0; }
 [dir="rtl"] .hero h1,
@@ -64,22 +73,32 @@
   text-align: center;
 }
 
-/* reduce motion preference */
+/* =========================================================
+   MOTION PREFERENCES (unified)
+   ========================================================= */
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
+  .mobile-nav-icon { transition: none !important; }
 }
 
-/* print: only lesson content is useful */
+/* =========================================================
+   PRINT
+   ========================================================= */
+
 @media print {
   .app-header, .app-footer, .audio-row, .answer-row, .btn, .mobile-bottom-nav { display: none !important; }
   body { background: #fff; color: #000; }
 }
 
-/* ---------- Reference-style floating bottom navigation (mobile only) ---------- */
+/* =========================================================
+   FLOATING BOTTOM NAVIGATION (mobile only)
+   ========================================================= */
+
 .mobile-bottom-nav {
   display: none;
 }
@@ -96,14 +115,14 @@
     right: max(.8rem, env(safe-area-inset-right, 0px));
     bottom: max(.7rem, env(safe-area-inset-bottom, 0px));
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     align-items: stretch;
     padding: .45rem .4rem;
     background: var(--nav-bg);
     color: var(--muted);
     border: 1px solid var(--border);
     border-radius: 26px;
-    box-shadow: 0 10px 30px rgba(38, 53, 44, .16);
+    box-shadow: var(--shadow);
     isolation: isolate;
     direction: ltr;
   }
@@ -156,6 +175,16 @@
   }
   .mobile-nav-link.is-active .mobile-nav-icon { transform: translateY(-1px) scale(1.06); }
 
+  /* touch feedback */
+  .mobile-nav-link:active { background: var(--surface-2); }
+  .mobile-nav-link.is-active:active { background: var(--primary-soft); }
+
+  /* keyboard focus (a11y) */
+  .mobile-nav-link:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
   .mobile-nav-link:active .mobile-nav-icon { transform: scale(.92); }
 
   [dir="rtl"] .mobile-bottom-nav { direction: rtl; }
@@ -164,13 +193,9 @@
 
 @media (max-width: 360px) {
   .mobile-bottom-nav { left: .5rem; right: .5rem; }
-  .mobile-nav-label { font-size: .66rem; }
+  .mobile-nav-label { font-size: .6rem; letter-spacing: -.01em; }
 }
 
 @media (min-width: 640px) {
   .mobile-bottom-nav { display: none !important; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mobile-nav-icon { transition: none !important; }
 }
