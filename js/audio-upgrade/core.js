@@ -16,6 +16,7 @@
    ============================================================ */
 
 import { getSettings, saveSettings } from '../settings.js';
+import { nativeTts, isNativeTtsAvailable, nativeSpeak, nativeStop } from './native.js';
 
 /* ---------------- audio preferences (own storage key) ---------------- */
 
@@ -117,6 +118,9 @@ let voicesReady = false;
 let voiceScanDone = false; // true once the initial scan finished (even with 0 voices)
 
 export function isSupported() {
+  // v9: native Android TTS counts as full support — the WebView often
+  // has no speechSynthesis voices, so the native engine is preferred.
+  if (isNativeTtsAvailable()) return true;
   return typeof window !== 'undefined'
     && 'speechSynthesis' in window
     && typeof window.SpeechSynthesisUtterance === 'function';
@@ -131,6 +135,23 @@ function synth() {
  *  resolves immediately with its cached result. */
 export function loadVoices() {
   return new Promise((resolve) => {
+    // v9: native engine → present one honest synthetic voice entry so
+    // settings UIs have something real to describe.
+    if (isNativeTtsAvailable()) {
+      if (!cachedVoices.length) {
+        cachedVoices = [{
+          name: 'Android System Voice',
+          lang: 'en-US',
+          voiceURI: 'native:android',
+          localService: true,
+          default: true,
+        }];
+        voicesReady = true;
+        voiceScanDone = true;
+      }
+      resolve(cachedVoices.slice());
+      return;
+    }
     if (!isSupported()) { resolve([]); return; }
     if (voicesReady && cachedVoices.length) { resolve(cachedVoices.slice()); return; }
     if (voiceScanDone && cachedVoices.length === 0) { resolve([]); return; }
@@ -290,13 +311,35 @@ export function speak(rawText, opts = {}) {
   if (!text) return false;
 
   const a = getAudioSettings();
+  const rate = clampRate(opts.rate ?? SPEED_PRESETS[a.speed]);
+  const volume = Math.min(1, Math.max(0, Number(opts.volume ?? a.volume)));
+
+  // v9: NATIVE ANDROID PATH — reliable voices + audio focus. The
+  // plugin's speak() promise resolves on completion (or rejects),
+  // which maps onto the same onend/onerror callbacks.
+  if (isNativeTtsAvailable()) {
+    const gen = ++speakGeneration;
+    lastRun = { text, opts: { ...opts } };
+    playing = true; paused = false; notify();
+    nativeSpeak(text, { rate, volume })
+      .then(() => {
+        if (gen !== speakGeneration) return;
+        finish();
+        if (typeof opts.onend === 'function') opts.onend();
+      })
+      .catch(() => {
+        if (gen !== speakGeneration) return;
+        finish();
+        if (typeof opts.onerror === 'function') opts.onerror();
+      });
+    return true;
+  }
+
   const gen = ++speakGeneration;
   const s = synth();
   try { s.cancel(); } catch { /* ignore */ }
 
   const voice = resolveVoice(opts.voiceURI || '');
-  const rate = clampRate(opts.rate ?? SPEED_PRESETS[a.speed]);
-  const volume = Math.min(1, Math.max(0, Number(opts.volume ?? a.volume)));
   const repeat = Math.min(3, Math.max(1, Number(opts.repeat ?? a.autoRepeat) || 1));
 
   lastRun = { text, opts: { ...opts } };
@@ -333,12 +376,20 @@ export function speak(rawText, opts = {}) {
 
 export function stopSpeaking() {
   speakGeneration += 1;
+  if (isNativeTtsAvailable()) { nativeStop(); }
   if (isSupported()) { try { synth().cancel(); } catch { /* ignore */ } }
   finish();
 }
 
-/** Pause current speech (Safari may ignore pause; failure is non-fatal). */
+/** Pause current speech. On the native Android engine there is no
+ *  pause primitive — playback stops (press Play to restart honestly). */
 export function pausePlayback() {
+  if (isNativeTtsAvailable()) {
+    if (!playing) return false;
+    nativeStop();
+    finish();
+    return true;
+  }
   if (!isSupported() || !playing) return false;
   try { synth().pause(); paused = true; notify(); return true; } catch { return false; }
 }
