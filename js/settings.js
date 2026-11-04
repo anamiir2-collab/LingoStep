@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS = {
   onScreenKeyboard: true, // show the built-in Latin keyboard under typing inputs
   soundEffects: true,    // short tones for correct/wrong letters while typing
   slowWordByWord: true,  // slow (turtle) audio reads the sentence word by word
+  dailyReminder: false,  // daily practice notification (v9, native + web)
   userName: '',          // optional display name used in the greeting
 };
 
@@ -62,6 +63,7 @@ export function saveSettings(patch = {}) {
   next.onScreenKeyboard = next.onScreenKeyboard !== false; // boolean, default true
   next.soundEffects = next.soundEffects !== false; // boolean, default true
   next.slowWordByWord = next.slowWordByWord !== false; // boolean, default true
+  next.dailyReminder = next.dailyReminder === true; // boolean, default false
   next.showArabic = next.showArabic !== false;
   next.strictGrading = next.strictGrading !== false;
   cache = next;

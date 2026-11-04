@@ -1,9 +1,27 @@
 /* ============================================================
-   LingoStep — lesson-engine.js
+   LingoStep — lesson-engine.js  (v9 smart exercise engine)
    Renders the lesson player: exercises (listen-and-type,
    fill-blank, word-order, multiple-choice), audio controls,
    feedback, progress, resume, completion summary.
    Also powers revision sessions (opts.reviewMode).
+
+   v9 guarantees (spec):
+   - NO internal keyboard anywhere: answers are touch-only
+     (letter tiles, word chips, option cards).
+   - SMART HINTS: the Hint button reveals only the next letter of
+     the current incomplete word — never the Arabic translation,
+     never the complete word, never the full answer. Repeated
+     presses stop at half the word. MC gets a controlled clue
+     (exclude one wrong option, then the answer's first letter).
+   - WORD LOCKING: correctly completed words turn green and are
+     locked for the whole attempt (cannot be deleted, edited,
+     replaced or moved). Incorrect words never lock.
+   - NO CLEAR-ALL: there is no way to erase the whole answer.
+   - RESTART requires explicit confirmation (custom dialog).
+   - SKIP is mandatory-answer: the skipped question earns no
+     points and a DIFFERENT question from the same lesson must be
+     answered before progression. With no alternative left, the
+     question must be completed.
    ============================================================ */
 
 import { el, toast } from './utils.js';
@@ -11,12 +29,14 @@ import { icon, iconLabel } from './icons.js';
 import { t } from './i18n.js';
 import { getSettings } from './settings.js';
 import { checkAnswer, wordDiff } from './grading.js';
-import { speak, stopSpeaking, speakWordByWord, isSupported as speechSupported } from './speech.js';
+import { speak, stopSpeaking, speakWordByWord, pausePlayback, resumePlayback, getAudioState, isSupported as speechSupported } from './speech.js';
 import { recordAttempt, updateLessonState, saveResume, getLessonState } from './progress.js';
 import { upsertOnWrong, gradeReview } from './review.js';
 import { navigate } from './router.js';
 import { getManifestEntry, nextLessonInSection, loadLesson } from './lesson-loader.js';
 import { createTouchTypingField, createLetterTiles } from './touch-typing.js';
+import { createWordOrderSession, pickAlternativeQuestion } from './exercise-state.js';
+import { excludedOption } from './hints.js';
 import { awardExercise, awardLessonComplete, markFirstAttemptFailed, getTotalXp } from './xp.js';
 import { messageForCorrect, messageForWrong, messageForXp, messageForLessonComplete } from './motivation.js';
 import { analyzeSentence, renderWordCards } from './word-cards.js';
@@ -24,6 +44,58 @@ import { saveSettings } from './settings.js';
 import { playCorrectFanfare, playWrongBuzz, playFinishFanfare, confettiBurst } from './feedback-fx.js';
 
 const rank = { correct: 3, minor: 2, incorrect: 1, skipped: 0 };
+const SPEEDS = [
+  { key: 'spdSlow', rate: 0.65 },
+  { key: 'spdNormal', rate: 1 },
+  { key: 'spdFast', rate: 1.3 },
+];
+
+/* ---------- reusable confirmation dialog (no window.confirm) ---------- */
+
+/**
+ * Accessible in-app confirmation dialog. Resolves true only after
+ * an explicit confirm tap; Cancel/backdrop/Escape resolve false.
+ */
+export function confirmDialog({ title, body, confirmText, cancelText, danger = false, lang = 'en' }) {
+  return new Promise((resolve) => {
+    const backdrop = el('div', { class: 'duo-backdrop ls-dialog-backdrop' });
+    const box = el('div', { class: 'ls-dialog', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': title }, [
+      el('div', { class: 'ls-dialog-icon' }, [icon(danger ? 'alert' : 'helpCircle')]),
+      el('h3', { class: 'ls-dialog-title', text: title }),
+      body ? el('p', { class: 'ls-dialog-body', text: body }) : null,
+      el('div', { class: 'ls-dialog-actions' }, [
+        el('button', {
+          class: 'btn btn-ghost', text: cancelText,
+          onclick: () => done(false),
+        }),
+        el('button', {
+          class: `btn ${danger ? 'btn-danger' : 'btn-primary'}`, text: confirmText,
+          onclick: () => done(true),
+        }),
+      ].filter(Boolean)),
+    ].filter(Boolean));
+    function done(v) {
+      document.removeEventListener('keydown', onKey);
+      backdrop.remove();
+      wrap.remove();
+      resolve(v);
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') done(false);
+      if (e.key === 'Enter') { e.preventDefault(); done(true); }
+    }
+    const wrap = el('div', { class: 'ls-dialog-wrap' }, [box]);
+    backdrop.addEventListener('click', () => done(false));
+    document.addEventListener('keydown', onKey);
+    document.body.append(backdrop, wrap);
+    requestAnimationFrame(() => {
+      backdrop.classList.add('is-open');
+      wrap.classList.add('is-open');
+    });
+    const btns = wrap.querySelectorAll('button');
+    setTimeout(() => { try { btns[btns.length - 1].focus({ preventScroll: true }); } catch { /* ok */ } }, 60);
+  });
+}
 
 /**
  * Render a lesson player into `container`.
@@ -81,7 +153,8 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
   let lastMotivation = '';    // avoid repeating the same message
   const firstAttemptMap = new Map(); // exerciseId -> false once answered wrong/skipped
   const hintUsedSet = new Set();     // exerciseIds where a hint was opened
-  let keyboardHandle = null;         // { destroy } for the on-screen keyboard
+  const altUsedIds = new Set();      // exercise ids already used as alternatives
+  let fieldHandle = null;            // { destroy } for the answer surface
   let exerciseTimerId = null;
   let swwUi = null;                  // active word-by-word playback handle
 
@@ -158,8 +231,33 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     stopWordByWordUi();
     dismissDuoSheet();
     if (reviewMode) { navigate('review'); return; }
-    if (typeof confirm !== 'undefined' && !confirm(t(L, 'confirmExit'))) return;
+    const ok = await confirmDialog({
+      title: t(L, 'exitTitle'),
+      body: t(L, 'exitBody'),
+      confirmText: t(L, 'confirmExitShort'),
+      cancelText: t(L, 'cancelBtn'),
+      danger: true,
+      lang: L,
+    });
+    if (!ok) return;
     navigate('section', [lesson.section]);
+  }
+
+  /** Restart the CURRENT exercise attempt — explicit confirmation only. */
+  async function restartExercise() {
+    const ok = await confirmDialog({
+      title: t(L, 'restartTitle'),
+      body: t(L, 'restartBody'),
+      confirmText: t(L, 'confirmRestart'),
+      cancelText: t(L, 'cancelBtn'),
+      danger: false,
+      lang: L,
+    });
+    if (!ok) return; // Cancel → nothing changes
+    results[idx] = null;
+    checked = false;
+    lastResult = null;
+    renderExercise(); // fresh attempt of the same question
   }
 
   // ---------- main exercise render ----------
@@ -169,7 +267,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     lastResult = null;
     exStart = Date.now();
     stopWordByWordUi();
-    if (keyboardHandle) { try { keyboardHandle.destroy(); } catch { /* ignore */ } keyboardHandle = null; }
+    if (fieldHandle) { try { fieldHandle.destroy(); } catch { /* ignore */ } fieldHandle = null; }
     renderHead();
     body.replaceChildren();
 
@@ -219,20 +317,23 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     }
 
     // every sentence lives in its own self-contained card:
-    // number chip, media/prompt, input, check action, hint and feedback
+    // number chip, media/prompt, answer surface, check action, hint and feedback
     const card = el('div', { class: 'sentence-card' });
     const cardHead = el('div', { class: 'sentence-head' }, [
       el('span', { class: 'sc-num', text: reviewMode ? t(L, 'exerciseCounter', { i: idx + 1, n: exercises.length }) : t(L, 'sentenceCounter', { i: idx + 1, n: exercises.length }) }),
       el('span', { class: 'chip sc-type', text: typeLabel(ex.type, L) }),
+      ...(ex.isAlternative ? [el('span', { class: 'chip chip-alt', text: t(L, 'altQuestionTag') })] : []),
       ...(doneCount ? [el('span', { class: 'chip chip-done' }, [iconLabel('check', String(doneCount))])] : []),
     ]);
     card.append(cardHead);
 
     const inputRow = el('div', { class: 'answer-row' });
     const feedbackBox = el('div');
+    const hintChip = el('div', { class: 'hint-chip-slot', 'aria-live': 'polite' });
     const actions = el('div', { class: 'card-actions' });
     state.feedbackBox = feedbackBox;
     state.card = card;
+    state.hintChip = hintChip;
 
     const checkBtn = el('button', {
       class: 'btn btn-primary',
@@ -248,8 +349,15 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       card.append(el('div', { class: 'prompt-label', text: t(L, 'typeWhatYouHear') }));
       const audioRow = el('div', { class: 'audio-row' });
       const listenBtn = el('button', { class: 'audio-main', 'aria-label': t(L, 'play'), title: t(L, 'play'), onclick: () => playAudio(ex.en) }, [icon('audio')]);
+      // Pause / resume toggle (web: speechSynthesis.pause; native: stop-at-word)
+      const pauseBtn = el('button', { class: 'audio-slow', 'aria-label': t(L, 'pause'), title: t(L, 'pause'), onclick: () => togglePause(pauseBtn) }, [icon('pause')]);
       const slowBtn = el('button', { class: 'audio-slow', 'aria-label': t(L, 'playSlow'), title: t(L, 'playSlow'), onclick: () => playSlowWordByWord(ex.en, slowBtn) }, [icon('turtle')]);
-      audioRow.append(listenBtn, slowBtn);
+      // quick playback-speed cycle (slow → normal → fast)
+      const speedBtn = el('button', {
+        class: 'audio-slow audio-speed', 'aria-label': t(L, 'speedTitle'), title: t(L, 'speedTitle'),
+        onclick: () => cycleSpeed(speedBtn),
+      }, [icon('gauge'), el('span', { class: 'audio-speed-label', text: speedLabel() })]);
+      audioRow.append(listenBtn, pauseBtn, slowBtn, speedBtn);
       // mute toggle for the typing sound effects (correct / wrong tones)
       const fxLabel = (on) => t(L, on ? 'soundFxOn' : 'soundFxOff');
       const fxOn = getSettings().soundEffects !== false;
@@ -272,7 +380,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
         // If speech is unavailable, show the sentence so the exercise stays usable.
         card.append(el('div', { class: 'sentence-text', dir: 'ltr', text: ex.en }));
       } else {
-        audioRow.append(el('span', { class: 'audio-caption', text: `${t(L, 'play')} · ${t(L, 'playSlow')}` }));
+        audioRow.append(el('span', { class: 'audio-caption', text: `${t(L, 'play')} · ${t(L, 'pause')} · ${t(L, 'playSlow')}` }));
         card.append(audioRow);
         // word-by-word progress dots light up while the turtle button reads
         card.append(el('div', { class: 'sww-dots', 'aria-hidden': 'true' }));
@@ -281,17 +389,22 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       if (settings.showArabic && ex.ar) {
         card.append(el('div', { class: 'sentence-ar', dir: 'rtl', text: ex.ar }));
       }
-      // v8 KEYBOARD-FREE dictation surface: letter slots driven by a
-      // touch keyboard and a JS string buffer. There is NO <input>
-      // element anywhere, so the Android/iOS system keyboard can never
-      // appear. Same slot rendering, same validation policy, same
-      // answers and grading (checkAnswer on the built value).
+      // v9 KEYBOARD-FREE dictation: word-grouped letter slots driven by
+      // LETTER TILES (no QWERTY pad, no <input> anywhere). Words lock
+      // green as they are completed; the space is automatic. Same
+      // slot rendering, same validation policy, same answers, same
+      // grading (checkAnswer on the built value).
       const typedField = createTouchTypingField({
         expected: ex.en,
         ariaLabel: t(L, 'typeWhatYouHear'),
-        labels: { backspace: t(L, 'kbBackspace'), space: t(L, 'kbSpace') },
+        tilesAria: t(L, 'lettersAria'),
+        labels: { backspace: t(L, 'kbBackspace') },
         onWrong: () => {},
         onEnter: () => { checked ? onNext() : onCheck(); },
+        onWordLocked: () => {
+          // gentle celebration per locked word (no layout shift)
+          if (navigator.vibrate) { try { navigator.vibrate(12); } catch { /* ignore */ } }
+        },
         onComplete: () => {
           // sentence fully entered → success state, then hand over to
           // the normal check pipeline (grading, XP, feedback, word cards)
@@ -304,21 +417,21 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       });
       inputRow.classList.add('lw-answer-row');
       inputRow.append(typedField.root);
-      const kbMount = el('div', { class: 'kb-mount' });
-      card.append(inputRow, kbMount);
-      keyboardHandle = { destroy() { try { typedField.destroy(); } catch { /* ignore */ } } };
+      card.append(inputRow);
+      fieldHandle = { destroy() { try { typedField.destroy(); } catch { /* ignore */ } } };
       actions.append(checkBtn, hintBtn, skipBtn);
       card.append(actions);
       state.typedField = typedField;
+      state.hintTarget = 'dictation';
       const footerControls = el('div', { class: 'lw-footer-controls' });
       const restartBtn = el('button', {
         class: 'btn btn-ghost btn-sm',
-        text: L === 'ar' ? 'أعد هذا التمرين' : 'Restart exercise',
-        onclick: () => { results[idx] = null; renderExercise(); },
+        text: t(L, 'restartExercise'),
+        onclick: restartExercise, // confirmation dialog inside
       });
       const replayBtn = el('button', {
         class: 'btn btn-ghost btn-sm',
-        text: L === 'ar' ? 'استمع مجدداً' : 'Listen again',
+        text: t(L, 'listenAgain'),
         onclick: () => playAudio(ex.en),
       });
       const footerNext = el('button', {
@@ -336,19 +449,29 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       card.append(el('div', { class: 'prompt-label', text: t(L, 'fillPrompt') }));
       card.append(el('div', { class: 'blank-display', dir: 'ltr', html: trustedBlankHtml(ex.display) }));
       if (settings.showArabic && ex.ar) card.append(el('div', { class: 'sentence-ar', dir: 'rtl', text: ex.ar }));
-      // v8 KEYBOARD-FREE fill-blank: letter tiles of the blank word
+      // v9 KEYBOARD-FREE fill-blank: letter tiles of the blank word
       // (words for multi-word blanks). Same question, same accepted
-      // answers, same checkAnswer validation — zero typing.
+      // answers, same checkAnswer validation — zero typing. No
+      // clear-all button; the answer locks only when correct.
       const tiles = createLetterTiles({
         source: ex.blankWord,
         ariaLabel: t(L, 'fillPrompt'),
-        labels: { backspace: t(L, 'kbBackspace'), clear: t(L, 'kbClear') },
+        labels: { backspace: t(L, 'kbBackspace') },
+        onComplete: () => {
+          // all tiles placed → validate immediately (word-level)
+          const at = idx;
+          window.setTimeout(() => {
+            if (!checked && idx === at) onCheck();
+          }, 480);
+        },
       });
       inputRow.append(tiles.root);
       card.append(inputRow);
       actions.append(checkBtn, hintBtn, skipBtn);
       card.append(actions);
       state.tiles = tiles;
+      state.hintTarget = 'blank';
+      state.blankHint = { revealed: 0 }; // letters revealed for THIS attempt
     }
 
     if (ex.type === 'word-order') {
@@ -358,32 +481,67 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       card.append(tray, bank);
       if (settings.showArabic && ex.ar) card.append(el('div', { class: 'sentence-ar', dir: 'rtl', text: ex.ar }));
 
-      const placed = [];
-      const chips = ex.words.map((w, i) => {
-        const chip = el('button', { class: 'wo-chip', text: w, 'data-i': String(i) });
-        chip.addEventListener('click', () => {
-          if (chip.classList.contains('used')) return;
-          chip.classList.add('used');
-          placed.push({ w, chip });
-          const placedChip = el('button', { class: 'wo-chip placed', text: w });
-          placedChip.addEventListener('click', () => {
-            const at = placed.findIndex((p) => p.chip === chip);
-            if (at >= 0) placed.splice(at, 1);
-            chip.classList.remove('used');
-            placedChip.remove();
-          });
-          tray.append(placedChip);
-        });
-        bank.append(chip);
-        return chip;
+      // v9 word-order: positional slots with word-by-word locking.
+      // A chip placed in the correct position locks green instantly;
+      // a wrong chip stays red and removable. Locked chips can never
+      // be moved or deleted. No clear-all button.
+      const woSession = createWordOrderSession({
+        expectedSentence: (ex.acceptedAnswers && ex.acceptedAnswers[0]) || ex.en,
+        chips: ex.words,
       });
-      const clearBtn = el('button', { class: 'btn btn-ghost btn-sm', text: t(L, 'resetWordOrder'), onclick: () => renderExercise() });
-      state.resetBtn = clearBtn;
+      state.woSession = woSession;
+
+      function renderWordOrder() {
+        tray.replaceChildren();
+        bank.replaceChildren();
+        for (const slot of woSession.slotsView()) {
+          if (!slot.chip) {
+            tray.append(el('span', { class: 'wo-slot is-empty', 'data-pos': String(slot.position), 'aria-label': `slot ${slot.position + 1}` }));
+            continue;
+          }
+          const chipEl = el('button', {
+            class: `wo-chip placed ${slot.locked ? 'is-locked' : 'is-wrong'}`,
+            text: slot.chip.text,
+            'aria-label': slot.locked ? t(L, 'wordLocked') : t(L, 'incorrect'),
+          });
+          if (!slot.locked) {
+            chipEl.addEventListener('click', () => {
+              woSession.removeAt(slot.position);
+              renderWordOrder();
+            });
+          } else {
+            chipEl.disabled = true; // locked: cannot be edited or moved
+          }
+          tray.append(chipEl);
+        }
+        for (const c of woSession.bankView()) {
+          if (c.used) continue;
+          const chip = el('button', { class: 'wo-chip', text: c.text, 'data-i': String(c.chipId) });
+          chip.addEventListener('click', () => {
+            if (checked) return;
+            const res = woSession.place(c.chipId);
+            if (res.placed) {
+              renderWordOrder();
+              if (res.sessionComplete && !checked) {
+                // every word locked in place → validate the sentence
+                window.setTimeout(() => { if (!checked && idx === exercises[idx] && exercises[idx].id === ex.id) onCheck(); }, 520);
+              }
+            }
+          });
+          bank.append(chip);
+        }
+        if (!woSession.bankView().some((c) => !c.used)) bank.classList.add('is-empty');
+        else bank.classList.remove('is-empty');
+      }
+      renderWordOrder();
+
       card.append(inputRow);
-      actions.append(clearBtn, checkBtn, hintBtn, skipBtn);
+      actions.append(checkBtn, hintBtn, skipBtn);
       card.append(actions);
-      state.getWordOrder = () => placed.map((p) => p.w).join(' ');
-      state.wordOrderComplete = () => placed.length === ex.words.length;
+      state.getWordOrder = () => woSession.getValue();
+      state.wordOrderComplete = () => woSession.slotsView().every((s) => s.chip);
+      state.hintTarget = 'word-order';
+      state.woHintPosition = -1; // last position the hint clued
     }
 
     if (ex.type === 'multiple-choice') {
@@ -395,7 +553,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       ex.options.forEach((optText, i) => {
         const b = el('button', { class: 'mc-option', text: optText, role: 'option' });
         b.addEventListener('click', () => {
-          if (checked) return;
+          if (checked || b.disabled) return;
           selected = i;
           optsBox.querySelectorAll('.mc-option').forEach((n) => n.classList.remove('selected'));
           b.classList.add('selected');
@@ -404,12 +562,16 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       });
       card.append(optsBox);
       card.append(inputRow);
-      actions.append(checkBtn, skipBtn);
+      actions.append(checkBtn, hintBtn, skipBtn);
       card.append(actions);
       state.getSelected = () => selected;
+      state.mcOptionsBox = optsBox;
+      state.hintTarget = 'mc';
+      state.mcHintStep = 0; // 0 none → 1 excluded → 2 first letter
     }
 
-    // feedback lives inside the same card, right after the actions
+    // hint chip slot + feedback live inside the same card, after the actions
+    card.append(hintChip);
     card.append(feedbackBox);
     body.append(card);
 
@@ -429,20 +591,69 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
 
   function typeLabel(type, lang) {
     const names = {
-      en: { 'listen-and-type': 'Listen & type', 'fill-blank': 'Fill the blank', 'word-order': 'Word order', 'multiple-choice': 'Choose' },
-      ar: { 'listen-and-type': 'استمع واكتب', 'fill-blank': 'أكمل الفراغ', 'word-order': 'رتّب الكلمات', 'multiple-choice': 'اختر' },
+      en: { 'listen-and-type': 'Listen & build', 'fill-blank': 'Fill the blank', 'word-order': 'Word order', 'multiple-choice': 'Choose' },
+      ar: { 'listen-and-type': 'استمع وابنِ', 'fill-blank': 'أكمل الفراغ', 'word-order': 'رتّب الكلمات', 'multiple-choice': 'اختر' },
     };
     return names[lang][type] || type;
   }
 
+  /* ---------- audio controls ---------- */
+
+  function speedIndex() {
+    const r = Number(getSettings().rate) || 1;
+    if (r < 0.8) return 0;
+    if (r > 1.15) return 2;
+    return 1;
+  }
+  function speedLabel() {
+    return t(L, SPEEDS[speedIndex()].key);
+  }
+  function cycleSpeed(btn) {
+    const next = (speedIndex() + 1) % SPEEDS.length;
+    saveSettings({ rate: SPEEDS[next].rate });
+    const labelEl = btn.querySelector('.audio-speed-label');
+    if (labelEl) labelEl.textContent = t(L, SPEEDS[next].key);
+    toast(`${t(L, 'speedTitle')}: ${t(L, SPEEDS[next].key)}`, 1400);
+    // replay the sentence at the new speed for instant feedback
+    playAudio(exercises[idx].en);
+  }
+
+  function togglePause(btn) {
+    const st = getAudioState() || {};
+    if (st.playing && !st.paused) {
+      pausePlayback();
+      btn.replaceChildren(icon('play'));
+      btn.setAttribute('aria-label', t(L, 'resume'));
+      btn.title = t(L, 'resume');
+    } else if (st.paused) {
+      resumePlayback();
+      btn.replaceChildren(icon('pause'));
+      btn.setAttribute('aria-label', t(L, 'pause'));
+      btn.title = t(L, 'pause');
+    } else {
+      playAudio(exercises[idx].en); // nothing playing → start
+    }
+  }
+
   function playAudio(text, rateOverride) {
     stopWordByWordUi();
+    resetPauseBtn();
     const ok = speak(text, {
       voiceURI: settings.voiceURI || '',
       rate: rateOverride ?? settings.rate,
       onerror: () => toast(t(L, 'speechUnavailable')),
     });
     if (!ok) toast(t(L, 'speechUnavailable'));
+  }
+
+  function resetPauseBtn() {
+    body.querySelectorAll('.audio-row .audio-slow').forEach((b) => {
+      if (!b.querySelector('.audio-speed-label') && b.getAttribute('aria-label') === t(L, 'resume')) {
+        b.replaceChildren(icon('pause'));
+        b.setAttribute('aria-label', t(L, 'pause'));
+        b.title = t(L, 'pause');
+      }
+    });
   }
 
   /** Clear any word-by-word playback + its dots/pulse UI. */
@@ -453,7 +664,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       d.classList.remove('is-active');
       d.replaceChildren();
     });
-    body.querySelectorAll('.audio-slow.is-speaking').forEach((b) => b.classList.remove('is-speaking')); 
+    body.querySelectorAll('.audio-slow.is-speaking').forEach((b) => b.classList.remove('is-speaking'));
   }
 
   /** Turtle button: word-by-word slow audio (falls back to slow sentence). */
@@ -479,17 +690,100 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     });
   }
 
+  /* ---------- smart hint system ---------- */
+
+  /** Show a hint chip (localized, never the answer). */
+  function hintChipMsg(text) {
+    state.hintChip.replaceChildren(el('div', { class: 'hint-box hint-box-sm', dir: 'auto' }, [iconLabel('bulb', text)]));
+  }
+
+  /**
+   * v9 Hint: FIRST LETTER of the current incomplete word only.
+   * Never the Arabic translation, never the complete word, never
+   * the full answer. Repeated presses stop at the cap.
+   */
   function showHint(ex) {
-    const existing = body.querySelector('.hint-box');
-    if (existing) existing.remove();
-    hintUsedSet.add(ex.id); // using a hint lowers the XP tier (see xp.js)
-    let text;
-    if (ex.type === 'listen-and-type') text = `${t(L, 'meaning')}: ${ex.ar}`;
-    else if (ex.type === 'fill-blank') text = `${t(L, 'meaning')}: ${ex.ar}`;
-    else if (ex.type === 'word-order') text = `${ex.words.length} ${t(L, 'words') || 'words'} — ${t(L, 'meaning')}: ${ex.ar}`;
-    else if (ex.type === 'multiple-choice') text = ex.hint || `${t(L, 'meaning')}: ${ex.ar}`;
-    if (ex.hint) text = `${ex.hint} — ${text}`;
-    state.card.append(el('div', { class: 'hint-box', dir: 'auto' }, [iconLabel('bulb', text)]));
+    hintUsedSet.add(ex.id); // any hint lowers the XP tier (see xp.js)
+    const target = state.hintTarget;
+
+    if (target === 'dictation' && state.typedField) {
+      const res = state.typedField.revealHint();
+      if (res.revealed) hintChipMsg(t(L, 'hintRevealed'));
+      else if (res.reason === 'cap-reached') hintChipMsg(t(L, 'hintNoMore'));
+      else if (res.reason === 'word-too-short') hintChipMsg(t(L, 'hintTooShort'));
+      else hintChipMsg(t(L, 'hintNoneLeft'));
+      return;
+    }
+
+    if (target === 'blank' && ex.type === 'fill-blank') {
+      const blank = String(ex.blankWord ?? '').trim();
+      const letters = Array.from(blank);
+      const cap = Math.max(1, Math.floor(letters.length / 2));
+      const revealed = state.blankHint?.revealed || 0;
+      if (letters.length < 2) { hintChipMsg(t(L, 'hintTooShort')); return; }
+      if (revealed >= cap) { hintChipMsg(t(L, 'hintNoMore')); return; }
+      state.blankHint.revealed = revealed + 1;
+      // reveal the NEXT letter (first press → first letter), styled
+      // in the hint color inside the clue chip: e.g. d _ _ _ _
+      const shown = letters.slice(0, state.blankHint.revealed)
+        .map((c, i) => (i === 0 ? c : c)).join('');
+      const rest = '_'.repeat(Math.max(0, letters.length - state.blankHint.revealed));
+      const chip = el('div', { class: 'hint-box hint-box-sm hint-letters', dir: 'ltr' }, [
+        icon('bulb'),
+        el('span', { class: 'hint-revealed-letter', text: shown }),
+        el('span', { class: 'hint-hidden-rest', text: rest }),
+      ]);
+      state.hintChip.replaceChildren(chip);
+      return;
+    }
+
+    if (target === 'word-order' && state.woSession) {
+      const pos = state.woSession.slotsView().findIndex((s) => !s.chip);
+      const word = state.woSession.nextExpectedWord();
+      if (!word) { hintChipMsg(t(L, 'hintNoneLeft')); return; }
+      if (pos === state.woHintPosition && pos >= 0) {
+        hintChipMsg(t(L, 'hintNoMore'));
+        return;
+      }
+      state.woHintPosition = pos;
+      const first = Array.from(word)[0] || '';
+      hintChipMsg(t(L, 'hintNextStarts', { c: first }));
+      return;
+    }
+
+    if (target === 'mc' && ex.type === 'multiple-choice') {
+      // step 1: exclude ONE wrong option (never selects the answer)
+      if (state.mcHintStep === 0) {
+        const wrong = excludedOption(ex);
+        if (wrong != null && state.mcOptionsBox) {
+          const btns = [...state.mcOptionsBox.querySelectorAll('.mc-option')];
+          const at = ex.options.indexOf(wrong);
+          if (at >= 0 && btns[at]) {
+            btns[at].classList.add('is-excluded');
+            btns[at].disabled = true;
+          }
+        }
+        state.mcHintStep = 1;
+        hintChipMsg(t(L, 'hintExcluded'));
+        return;
+      }
+      // step 2: first letter of the correct answer (still no selection)
+      if (state.mcHintStep === 1) {
+        const correct = Array.isArray(ex.options) ? ex.options[ex.answerIndex] : null;
+        const letter = correct ? (Array.from(String(correct).trim())[0] || '') : '';
+        if (letter) {
+          state.mcHintStep = 2;
+          hintChipMsg(t(L, 'hintAnswerStarts', { c: letter }));
+        } else {
+          hintChipMsg(t(L, 'hintNoneLeft'));
+        }
+        return;
+      }
+      hintChipMsg(t(L, 'hintNoneLeft'));
+      return;
+    }
+
+    hintChipMsg(t(L, 'hintNoneLeft'));
   }
 
   // ---------- checking ----------
@@ -514,6 +808,11 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
       const base = checkAnswer(val, ex.acceptedAnswers, { strict: settings.strictGrading });
       result = { ...base, expectedDisplay: ex.blankWord };
       if (result.status === 'empty') { toast(t(L, 'emptyAnswer')); return; }
+      if (result.status === 'correct' && state.tiles) {
+        state.tiles.lockCorrect(); // validated → green + frozen
+      } else if (result.status !== 'correct' && state.tiles) {
+        state.tiles.markIncorrect(); // red — never locks, stays editable
+      }
     } else if (ex.type === 'word-order') {
       const built = state.getWordOrder ? state.getWordOrder() : '';
       if (!state.wordOrderComplete || !state.wordOrderComplete()) {
@@ -594,6 +893,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     }
 
     state.feedbackBox.replaceChildren(fb);
+    state.hintChip.replaceChildren(); // hint never survives the answer
     const hudValues = body.querySelectorAll('.lw-hud-item strong');
     if (hudValues.length >= 3) {
       hudValues[1].textContent = String(sessionXp);
@@ -753,11 +1053,12 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
         if (status === 'incorrect' || status === 'skipped') {
           await upsertOnWrong(ex.id, ex.lessonId, ex.grammarTags || []);
         }
-        // retry sessions map back to the ORIGINAL exercise index so
-        // lesson state keeps a single consistent key space
+        // Every exercise records under its ORIGINAL index so lesson
+        // state keeps one consistent key space (alternatives carry
+        // origIdx; retry sessions already do).
         await updateLessonState(ex.lessonId, {
           totalExercises: retryMode ? originalCount : exercises.length,
-          index: retryMode ? (ex.origIdx ?? idx) : idx,
+          index: ex.origIdx ?? idx,
           status,
         });
       }
@@ -766,28 +1067,64 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
     }
   }
 
-  function onSkip() {
+  /* ---------- mandatory skip: alternative question required ---------- */
+
+  async function onSkip() {
     if (checked) { onNext(); return; }
     const ex = exercises[idx];
-    if (typeof confirm !== 'undefined' && !confirm(t(L, 'skipConfirm'))) return;
-    checked = true;
-    if (state.footerNext) state.footerNext.disabled = false;
+
+    // 1) record the skip: no points, no success (history + review queue)
     results[idx] = { status: 'skipped', ex, typedValue: '' };
     firstAttemptMap.set(ex.id, false);
-    const fb = el('div', { class: 'feedback bad' }, [
-      el('div', { class: 'fb-title' }, [iconLabel('arrowRight', t(L, 'skip'))]),
-      el('div', {}, [`${t(L, 'expectedAnswer')}: `, el('span', { class: 'expected', text: ex.en })]),
-      ex.ar ? el('div', { class: 'ar-meaning', dir: 'rtl', text: ex.ar }) : null,
-    ]);
-    state.feedbackBox.replaceChildren(fb);
     persistAnswer(ex, 'skipped');
-    if (state.resetBtn) state.resetBtn.disabled = true;
+
+    // 2) pick a DIFFERENT question from the same lesson
+    const answeredIds = new Set(results.filter(Boolean).map((r) => r.ex.id));
+    const alt = pickAlternativeQuestion({ exercises, currentIndex: idx, usedIds: altUsedIds, answeredIds });
+
+    if (!alt) {
+      // No alternative exists → the question must be completed.
+      results[idx] = null;      // the skip is not kept: nothing was answered
+      checked = false;
+      toast(t(L, 'skipAltNone'), 3200);
+      hintChipMsgLong(t(L, 'skipAltNone'));
+      return;
+    }
+
+    altUsedIds.add(alt.exercise.id);
+    checked = true;
+    if (state.footerNext) state.footerNext.disabled = false;
     if (state.hintBtn) state.hintBtn.disabled = true;
+    if (state.skipBtn) state.skipBtn.disabled = true;
+
+    // feedback: the skip itself earns nothing
+    const fb = el('div', { class: 'feedback bad' }, [
+      el('div', { class: 'fb-title' }, [iconLabel('arrowRight', t(L, 'skipAltTitle'))]),
+      el('p', { class: 'small', text: t(L, 'skipAltBody') }),
+      ex.ar ? el('div', { class: 'ar-meaning', dir: 'rtl', text: ex.ar }) : null,
+    ].filter(Boolean));
+    state.feedbackBox.replaceChildren(fb);
+
+    // 3) splice the alternative in right after the skipped position and
+    //    remove it from its natural slot (it must appear exactly once).
+    let removeAt = alt.index;
+    const altExercise = { ...alt.exercise, isAlternative: true, origIdx: alt.index };
+    exercises.splice(removeAt, 1);
+    if (removeAt < idx) idx -= 1;          // removal shifted our position
+    results.splice(removeAt, 1);
+    results.splice(idx + 1, 0, null);
+    exercises.splice(idx + 1, 0, altExercise);
+    originalCount = originalCount; // lesson-state accounting uses origIdx
+
     const skipNext = el('button', { class: 'btn btn-primary', onclick: onNext }, [iconLabel('arrowRight', t(L, 'nextExercise'))]);
     state.checkBtn.replaceWith(skipNext);
     skipNext.focus();
-    // skipped answers get the same feedback sheet (red variant, no XP/sound sting)
     showDuoSheet({ status: 'skipped' }, ex, 0);
+  }
+
+  /** Persistent inline message (used when skipping is blocked). */
+  function hintChipMsgLong(text) {
+    state.hintChip.replaceChildren(el('div', { class: 'hint-box hint-box-warn', dir: 'auto', role: 'alert' }, [iconLabel('alert', text)]));
   }
 
   function onNext() {
@@ -862,6 +1199,7 @@ export async function renderLessonPlayer(container, lessonId, opts = {}) {
         rowStat(t(L, 'resultsQuestions'), String(attempted.length)),
         rowStat(t(L, 'correctAnswers'), `${good + minor}`),
         rowStat(t(L, 'resultsWrong'), `${bad + skipped}`),
+        rowStat(t(L, 'skippedTag'), String(skipped)),
         rowStat(t(L, 'timeSpent'), `${mins} ${t(L, 'minutes')}`),
         rowStat(t(L, 'xpThisSession'), `+${formatXp(sessionXp)}`),
         rowStat(t(L, 'xpTotal'), formatXp(totalXp)),

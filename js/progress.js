@@ -202,30 +202,44 @@ export async function getAttemptSummary() {
   return out;
 }
 
-/* ---------- backup ---------- */
+/* ---------- backup (v2) ---------- */
 
-const BACKUP_VERSION = 1;
+/* v2 carries the full learning profile: core progress + XP ledger,
+   spaced-review queue, vocabulary stats, placement result and the
+   daily plan. v1 files (core keys only) still import untouched. */
+const BACKUP_VERSION = 2;
+
+const EXTRA_BACKUP_KEYS = ['xp', 'review', 'vocabStats', 'placementResult', 'dailyPlan'];
+
+function xpTotalOf(ledger) {
+  if (!ledger || typeof ledger !== 'object') return 0;
+  let total = 0;
+  for (const a of Object.values(ledger.awarded || {})) total += Number(a?.xp) || 0;
+  for (const b of Object.values(ledger.lessonBonus || {})) total += Number(b?.xp) || 0;
+  return total;
+}
 
 export async function exportBackup() {
-  const [attempts, lessons, daily, meta] = await Promise.all([
+  const [attempts, lessons, daily, meta, xp, review, vocabStats, placementResult, dailyPlan] = await Promise.all([
     loadMap(K.attempts), loadMap(K.lessons), loadMap(K.daily), loadMap(K.meta),
+    loadMap('xp'), loadMap('review'), loadMap('vocabStats'), loadMap('placementResult'), loadMap('dailyPlan'),
   ]);
   return {
     app: 'lingostep',
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
-    data: { attempts, lessons, daily, meta },
+    data: { attempts, lessons, daily, meta, xp, review, vocabStats, placementResult, dailyPlan },
   };
 }
 
-/** Validate + apply a backup. replace=false merges (newer attempts win). */
+/** Validate + apply a backup. replace=false merges (newer entries win). */
 export async function importBackup(backup, { replace = true } = {}) {
   if (!backup || typeof backup !== 'object') throw new Error('invalid backup');
   if (backup.app !== 'lingostep') throw new Error('not a lingostep backup');
   if (!backup.data || typeof backup.data !== 'object') throw new Error('missing data');
 
   const d = backup.data;
-  for (const key of ['attempts', 'lessons', 'daily', 'meta']) {
+  for (const key of ['attempts', 'lessons', 'daily', 'meta', ...EXTRA_BACKUP_KEYS]) {
     if (d[key] !== undefined && (typeof d[key] !== 'object' || d[key] === null || Array.isArray(d[key]))) {
       throw new Error(`invalid field: ${key}`);
     }
@@ -239,6 +253,7 @@ export async function importBackup(backup, { replace = true } = {}) {
     await kvSet(K.lessons, d.lessons || {});
     await kvSet(K.daily, d.daily || {});
     await kvSet(K.meta, d.meta || {});
+    for (const key of EXTRA_BACKUP_KEYS) await kvSet(key, d[key] || {});
   } else {
     // merge: keep whichever map has more entries / later dates (simple, predictable)
     for (const key of [K.attempts, K.lessons, K.daily]) {
@@ -249,6 +264,34 @@ export async function importBackup(backup, { replace = true } = {}) {
     }
     const curMeta = await loadMap(K.meta);
     await kvSet(K.meta, { ...curMeta, ...(d.meta || {}) });
+
+    // review / vocab / plan: shallow key merge
+    for (const key of ['review', 'vocabStats', 'dailyPlan']) {
+      const cur = await loadMap(key);
+      await kvSet(key, { ...cur, ...(d[key] || {}) });
+    }
+    // placement: keep the more recent result
+    const curPlace = await loadMap('placementResult');
+    const incPlace = d.placementResult || {};
+    await kvSet('placementResult', (incPlace.at || 0) >= (curPlace.at || 0) ? incPlace : curPlace);
+
+    // xp: per-exercise merge (newest entry wins), then rebuild the total
+    const cur = await loadMap('xp');
+    const inc = d.xp || {};
+    const awarded = { ...(cur.awarded || {}) };
+    for (const [exId, entry] of Object.entries(inc.awarded || {})) {
+      const prev = awarded[exId];
+      if (!prev || (entry?.at || 0) >= (prev.at || 0)) awarded[exId] = entry;
+    }
+    const lessonBonus = { ...(cur.lessonBonus || {}) };
+    for (const [lesId, entry] of Object.entries(inc.lessonBonus || {})) {
+      const prev = lessonBonus[lesId];
+      if (!prev || (entry?.at || 0) >= (prev.at || 0)) lessonBonus[lesId] = entry;
+    }
+    const history = [...(cur.history || []), ...(inc.history || [])]
+      .sort((a, b) => (b?.at || 0) - (a?.at || 0))
+      .slice(0, 300);
+    await kvSet('xp', { awarded, lessonBonus, history, total: xpTotalOf({ awarded, lessonBonus }) });
   }
   return true;
 }
@@ -258,5 +301,6 @@ export async function clearAllProgress() {
   await kvDel(K.lessons);
   await kvDel(K.daily);
   await kvDel(K.meta);
+  for (const key of EXTRA_BACKUP_KEYS) await kvDel(key);
   return true;
 }

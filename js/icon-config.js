@@ -55,6 +55,11 @@ export const ICONS = {
   info: { type: 'svg', src: './assets/icons/icons.svg#info' },
   search: { type: 'svg', src: './assets/icons/icons.svg#search' },
   sliders: { type: 'svg', src: './assets/icons/icons.svg#sliders' },
+  pause: { type: 'svg', src: './assets/icons/icons.svg#pause' },
+  gauge: { type: 'svg', src: './assets/icons/icons.svg#gauge' },
+  helpCircle: { type: 'svg', src: './assets/icons/icons.svg#helpCircle' },
+  bell: { type: 'svg', src: './assets/icons/icons.svg#bell' },
+  wifiOff: { type: 'svg', src: './assets/icons/icons.svg#wifiOff' },
   /* pre-rendered colored assets shipped in assets/icons (More-screen shortcuts) */
   languagePng: { type: 'png', src: './assets/icons/language.png' },
   settingsPng: { type: 'png', src: './assets/icons/settings.png' },
