@@ -11,7 +11,7 @@
    Version bump replaces old caches on activate.
    ============================================================ */
 
-const VERSION = 'v8.0.0-mobile';
+const VERSION = 'v9.0.0-android';
 const SHELL_CACHE = `lingostep-shell-${VERSION}`;
 const LESSON_CACHE = `lingostep-lessons-${VERSION}`;
 const KNOWN_CACHES = [SHELL_CACHE, LESSON_CACHE];
@@ -20,13 +20,14 @@ const SHELL_ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './css/style.css?v=8',
-  './css/themes.css?v=8',
-  './css/responsive.css?v=8',
-  './css/ios-duo.css?v=8',
-  './css/dialogues.css?v=8',
-  './css/redesign.css?v=8',
-  './css/mobile.css?v=8',
+  './css/style.css?v=9',
+  './css/themes.css?v=9',
+  './css/responsive.css?v=9',
+  './css/ios-duo.css?v=9',
+  './css/dialogues.css?v=9',
+  './css/redesign.css?v=9',
+  './css/mobile.css?v=9',
+  './css/premium.css?v=9',
   './js/app.js',
   './js/touch-typing.js',
   './js/achievements.js',
@@ -109,13 +110,14 @@ const SHELL_ASSETS = [
   './js/audio-upgrade/core.js',
   './js/audio-upgrade/ui.js',
   './js/audio-upgrade/boot.js',
+  './js/audio-upgrade/native.js',
   './js/grading.js',
   './js/lesson-schema.js',
   './js/lesson-loader.js',
   './js/lesson-engine.js',
-  './js/listening-writing-enhancements.js',
+  './js/exercise-state.js',
+  './js/native.js',
   './js/letter-track.js',
-  './js/keyboard.js',
   './js/xp.js',
   './js/motivation.js',
   './js/word-cards.js',
